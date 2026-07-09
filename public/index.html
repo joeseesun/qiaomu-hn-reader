@@ -68,13 +68,14 @@
     <div class="shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="乔木 HN 速读首页">
-          <span class="brand-dot" aria-hidden="true"></span>
+          <img class="brand-icon" src="/favicon.svg" width="22" height="22" alt="" aria-hidden="true" />
           <span class="brand-name">乔木 HN 速读</span>
           <span class="brand-sub">Hacker News 中文雷达</span>
         </a>
         <div class="topbar-actions">
-          <button class="icon-btn" type="button" data-action="refresh" aria-label="刷新">
-            <span data-lucide="refresh-cw" aria-hidden="true"></span>
+          <button class="install-app-btn" type="button" data-action="install-app" hidden>
+            <span data-lucide="download" aria-hidden="true"></span>
+            <span>安装App</span>
           </button>
         </div>
       </header>
@@ -89,6 +90,9 @@
         <div class="filter-group">
           <button class="filter-icon" type="button" data-action="sort-points" data-sort-points="desc" aria-label="当前按热度从高到低,点击改为低到高">
             <span data-lucide="arrow-down-wide-narrow" aria-hidden="true"></span>
+          </button>
+          <button class="filter-icon" type="button" data-action="refresh" aria-label="刷新">
+            <span data-lucide="refresh-cw" aria-hidden="true"></span>
           </button>
         </div>
       </div>

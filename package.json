@@ -1,6 +1,6 @@
 {
   "name": "qiaomu-hn-reader",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "type": "module",
   "description": "乔木 HN 速读网站与 iOS-ready API for hn.qiaomu.ai.",
