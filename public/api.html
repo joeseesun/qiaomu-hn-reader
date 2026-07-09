@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f0e6" />
+    <title>乔木 HN 速读 API</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css?v=%APP_VERSION%" />
+    %UMAMI_SCRIPT%
+  </head>
+  <body>
+    <main class="docs-page">
+      <a class="back-link" href="/">← 返回阅读器</a>
+      <header class="docs-hero">
+        <p class="kicker">乔木 HN 速读 API</p>
+        <h1>给网页和未来 iOS 共用的接口。</h1>
+        <p>所有响应都是 JSON；翻译只在服务端调用 DeepSeek，客户端不接触密钥。</p>
+      </header>
+
+      <section class="docs-grid">
+        <article>
+          <h2>Health</h2>
+          <code>GET /api/health</code>
+          <p>服务、版本、时间、翻译模型和启用状态。</p>
+        </article>
+        <article>
+          <h2>Status</h2>
+          <code>GET /api/status</code>
+          <p>后台快照、刷新周期和评论预热的运行状态。</p>
+        </article>
+        <article>
+          <h2>Topics</h2>
+          <code>GET /api/topics</code>
+          <p>内置主题列表，含 feed、搜索 query 和 UI accent。</p>
+        </article>
+        <article>
+          <h2>Insights</h2>
+          <code>GET /api/insights</code>
+          <p>首页菜单使用的升温榜和产品雷达。</p>
+        </article>
+        <article>
+          <h2>Stories</h2>
+          <code>GET /api/stories?topic=frontpage&amp;pointsSort=desc</code>
+          <p>从本地快照读取单主题条目，可加关键词、points 排序、评论数；默认带中文标题和看点。</p>
+        </article>
+        <article>
+          <h2>Discussion</h2>
+          <code>GET /api/stories/{id}/comments</code>
+          <p>返回已缓存评论、评论译文和中文讨论速读文章，适合点击展开时秒开。</p>
+        </article>
+        <article>
+          <h2>Merged Feed</h2>
+          <code>POST /api/stories/merge</code>
+          <p>请求体传 <code>{"topics":["ai","show"],"translate":true}</code>，返回去重后的订阅流。</p>
+        </article>
+        <article>
+          <h2>Translate</h2>
+          <code>POST /api/translate</code>
+          <p>传入 story 数组，返回以 story id 为 key 的中文标题、看点和标签。</p>
+        </article>
+        <article>
+          <h2>OpenAPI</h2>
+          <code>GET /api/openapi.json</code>
+          <p>机器可读契约，iOS 客户端可以按这个生成请求层。</p>
+        </article>
+      </section>
+
+      <section class="docs-example">
+        <h2>iOS 请求示例</h2>
+        <pre><code>let url = URL(string: "https://hn.qiaomu.ai/api/stories?topic=frontpage")!
+let (data, _) = try await URLSession.shared.data(from: url)
+let feed = try JSONDecoder().decode(HNFeedResponse.self, from: data)</code></pre>
+      </section>
+    </main>
+  </body>
+</html>
