@@ -1,0 +1,16 @@
+[Unit]
+Description=HN Qiaomu Reader
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/qiaomu-apps/hn-qiaomu
+EnvironmentFile=/etc/qiaomu-apps/hn-qiaomu.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=5
+User=www
+Group=www
+
+[Install]
+WantedBy=multi-user.target

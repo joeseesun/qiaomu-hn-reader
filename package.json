@@ -1,0 +1,30 @@
+{
+  "name": "qiaomu-hn-reader",
+  "version": "0.5.2",
+  "private": true,
+  "type": "module",
+  "description": "乔木 HN 速读网站与 iOS-ready API for hn.qiaomu.ai.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/server.js",
+    "check": "npm run build",
+    "smoke:api": "node scripts/smoke-api.mjs"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "lucide": "^1.24.0",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.10",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
