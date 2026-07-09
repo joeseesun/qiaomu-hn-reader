@@ -1,4 +1,7 @@
 const FAVORITES_KEY = "qiaomu-hn-favorites-v1";
+const RECENT_CACHE_KEY = "qiaomu-hn-recent-cache-v1";
+const READING_PROGRESS_KEY = "qiaomu-hn-reading-progress-v1";
+const RECENT_CACHE_LIMIT = 8;
 
 const views = [
   { id: "home", label: "首页精选" },
@@ -23,8 +26,10 @@ const state = {
   insightDiscussions: {},
   discussions: {},
   favorites: new Map(),
+  readingProgress: new Map(),
   storyCache: new Map(),
-  translationCache: {}
+  translationCache: {},
+  initialData: null
 };
 
 const validViews = new Set(views.map((view) => view.id));
@@ -39,7 +44,9 @@ const el = {
   toast: document.querySelector("[data-toast]"),
   refreshBtn: document.querySelector('[data-action="refresh"]'),
   installAppBtn: document.querySelector('[data-action="install-app"]'),
-  sortPointsBtn: document.querySelector('[data-action="sort-points"]')
+  sortPointsBtn: document.querySelector('[data-action="sort-points"]'),
+  exportFavoritesBtn: document.querySelector('[data-action="export-favorites"]'),
+  continueReadingBtn: document.querySelector('[data-action="continue-reading"]')
 };
 
 function escapeHtml(value = "") {
@@ -143,6 +150,50 @@ function syncUrlState({ replace = false } = {}) {
   window.history[method]({}, "", nextUrl);
 }
 
+function readJsonStorage(key, fallback) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null");
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function recentCacheEntries() {
+  const cache = readJsonStorage(RECENT_CACHE_KEY, { entries: [] });
+  return Array.isArray(cache.entries) ? cache.entries : [];
+}
+
+function getRecentCache(key) {
+  return recentCacheEntries().find((entry) => entry.key === key)?.data || null;
+}
+
+function saveRecentCache(key, data) {
+  if (!key || !data) return;
+  const entries = recentCacheEntries().filter((entry) => entry.key !== key);
+  entries.unshift({ key, data, savedAt: new Date().toISOString() });
+  writeJsonStorage(RECENT_CACHE_KEY, { version: 1, entries: entries.slice(0, RECENT_CACHE_LIMIT) });
+}
+
+function readInitialData() {
+  const node = document.getElementById("__HN_INITIAL_DATA__");
+  if (!node?.textContent) return null;
+  try {
+    return JSON.parse(node.textContent);
+  } catch {
+    return null;
+  }
+}
+
 function loadFavorites() {
   try {
     const rows = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
@@ -154,6 +205,15 @@ function loadFavorites() {
 
 function saveFavorites() {
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(Array.from(state.favorites.values())));
+}
+
+function loadReadingProgress() {
+  const rows = readJsonStorage(READING_PROGRESS_KEY, {});
+  state.readingProgress = new Map(Object.entries(rows).filter(([, value]) => value && typeof value === "object"));
+}
+
+function saveReadingProgress() {
+  writeJsonStorage(READING_PROGRESS_KEY, Object.fromEntries(state.readingProgress.entries()));
 }
 
 function isFavorite(storyId) {
@@ -224,6 +284,94 @@ function storyUrl() {
   return `/api/stories?${params.toString()}`;
 }
 
+function currentProgressKey() {
+  const search = el.searchInput.value.trim();
+  if (search) return `search:${search}:sort:${state.pointsSort}`;
+  return `view:${state.activeView}:topic:${state.activeTopic}:sort:${state.pointsSort}`;
+}
+
+function currentProgress() {
+  return state.readingProgress.get(currentProgressKey()) || null;
+}
+
+function markStoryProgress(storyId) {
+  if (!storyId || state.activeView === "favorites") return;
+  const node = el.storyList.querySelector(`[data-story-id="${CSS.escape(storyId)}"]`);
+  if (!node) return;
+  const index = Number(node.dataset.storyIndex || 0);
+  state.readingProgress.set(currentProgressKey(), {
+    storyId,
+    index,
+    scrollY: Math.max(0, window.scrollY),
+    view: state.activeView,
+    updatedAt: new Date().toISOString()
+  });
+  saveReadingProgress();
+  applyReadingProgressState();
+}
+
+function visibleStoryNode() {
+  const nodes = Array.from(el.storyList.querySelectorAll(".story"));
+  if (!nodes.length) return null;
+  const anchorTop = Math.min(180, window.innerHeight * 0.32);
+  let candidate = nodes[0];
+  for (const node of nodes) {
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom <= 72) continue;
+    if (rect.top <= anchorTop) {
+      candidate = node;
+      continue;
+    }
+    break;
+  }
+  return candidate;
+}
+
+function updateReadingProgressFromScroll() {
+  if (state.activeView === "favorites") return;
+  const node = visibleStoryNode();
+  if (!node) return;
+  markStoryProgress(node.dataset.storyId);
+}
+
+function continueReading() {
+  const record = currentProgress();
+  if (!record?.storyId) return;
+  const node = el.storyList.querySelector(`[data-story-id="${CSS.escape(record.storyId)}"]`);
+  if (node) {
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.classList.add("is-progress-pulse");
+    setTimeout(() => node.classList.remove("is-progress-pulse"), 1200);
+    return;
+  }
+  if (Number.isFinite(record.scrollY)) window.scrollTo({ top: record.scrollY, behavior: "smooth" });
+}
+
+function updateFeedActions() {
+  if (el.exportFavoritesBtn) {
+    el.exportFavoritesBtn.hidden = !(state.activeView === "favorites" && state.favorites.size > 0);
+  }
+  if (el.continueReadingBtn) {
+    const record = currentProgress();
+    const node = record?.storyId ? el.storyList.querySelector(`[data-story-id="${CSS.escape(record.storyId)}"]`) : null;
+    const shouldShow = Boolean(state.activeView !== "favorites" && node && window.scrollY < node.offsetTop - 160);
+    el.continueReadingBtn.hidden = !shouldShow;
+  }
+}
+
+function applyReadingProgressState() {
+  const record = currentProgress();
+  const readIndex = Number.isFinite(record?.index) ? record.index : -1;
+  el.storyList.querySelectorAll(".story").forEach((node) => {
+    const index = Number(node.dataset.storyIndex || 0);
+    const isRead = readIndex >= 0 && index <= readIndex;
+    const isAnchor = Boolean(record?.storyId && node.dataset.storyId === record.storyId);
+    node.classList.toggle("is-read", isRead);
+    node.classList.toggle("is-progress-anchor", isAnchor);
+  });
+  updateFeedActions();
+}
+
 function articleReadyFromMeta(meta = {}) {
   return Boolean(meta.articleReady);
 }
@@ -232,10 +380,11 @@ function storyCommentId(story) {
   return story.hnId || extractHnId(story.commentsUrl) || story.id;
 }
 
-function renderStories(stories, translations = {}, freshness = {}, discussions = {}) {
+function renderStories(stories, translations = {}, freshness = {}, discussions = {}, options = {}) {
   state.discussions = discussions || {};
   state.translationCache = { ...translations };
   state.storyCache.clear();
+  const animate = options.animate !== false;
 
   if (!stories.length) {
     el.storyList.innerHTML = `
@@ -245,6 +394,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
       </div>
     `;
     el.feedCount.textContent = freshness.ready === false ? "同步中" : "";
+    updateFeedActions();
     return;
   }
 
@@ -258,7 +408,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
     const titleZh = hasZh ? t.titleZh : "";
     const summary = hasZh && t?.summaryZh ? t.summaryZh : story.reason || "";
     const noZh = !hasZh ? " no-translation" : "";
-    const delay = i < 12 ? Math.min(i * 45, 360) : 0;
+    const delay = animate && i < 12 ? Math.min(i * 45, 360) : 0;
     const rank = String(i + 1).padStart(2, "0");
     const commentId = storyCommentId(story);
     const commentsCount = story.comments ?? 0;
@@ -268,7 +418,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
     const favorite = isFavorite(story.id);
 
     return `
-      <article class="story${noZh}" data-story-id="${escapeHtml(story.id)}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
+      <article class="story${noZh}${animate ? "" : " story-instant"}" data-story-id="${escapeHtml(story.id)}" data-story-index="${i}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
         <div class="story-rank">${rank}</div>
         <div class="story-main">
           <div class="story-topline">
@@ -308,6 +458,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
       </article>
     `;
   }).join("");
+  applyReadingProgressState();
   renderIcons(el.storyList);
 }
 
@@ -322,18 +473,31 @@ async function loadStories({ silent = false } = {}) {
   state.storiesAbort = new AbortController();
   const topic = getActiveTopic();
   const search = el.searchInput.value.trim();
+  const cacheKey = storyUrl();
 
   el.toolbar.hidden = false;
   el.feedTitle.textContent = search ? "搜索结果" : (topic?.label || "首页精选");
   if (!silent) setSkeleton(8);
 
   try {
-    const response = await fetch(storyUrl(), { signal: state.storiesAbort.signal });
+    const response = await fetch(cacheKey, { signal: state.storiesAbort.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    renderStories(data.stories || [], data.translations || {}, data.freshness || {}, data.discussions || {});
+    renderStories(data.stories || [], data.translations || {}, data.freshness || {}, data.discussions || {}, { animate: !silent });
+    saveRecentCache(cacheKey, {
+      stories: data.stories || [],
+      translations: data.translations || {},
+      freshness: data.freshness || {},
+      discussions: data.discussions || {}
+    });
   } catch (error) {
     if (error.name === "AbortError") return;
+    const cached = getRecentCache(cacheKey);
+    if (cached?.stories?.length) {
+      renderStories(cached.stories || [], cached.translations || {}, cached.freshness || {}, cached.discussions || {}, { animate: false });
+      showToast("已显示最近缓存");
+      return;
+    }
     el.storyList.innerHTML = `
       <div class="state">
         <h3>这次没读到 Hacker News</h3>
@@ -341,18 +505,37 @@ async function loadStories({ silent = false } = {}) {
       </div>
     `;
     el.feedCount.textContent = "";
+    updateFeedActions();
   }
 }
 
 async function loadInsights() {
   if (state.insightsAbort) state.insightsAbort.abort();
   state.insightsAbort = new AbortController();
-  const response = await fetch("/api/insights", { signal: state.insightsAbort.signal });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
-  state.insights = data.insights || null;
-  state.insightDiscussions = data.discussions || {};
-  return data;
+  const cacheKey = "/api/insights";
+  try {
+    const response = await fetch(cacheKey, { signal: state.insightsAbort.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    state.insights = data.insights || null;
+    state.insightDiscussions = data.discussions || {};
+    saveRecentCache(cacheKey, {
+      ok: true,
+      insights: state.insights,
+      discussions: state.insightDiscussions,
+      freshness: data.freshness || {}
+    });
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+    const cached = getRecentCache(cacheKey);
+    if (cached?.insights) {
+      state.insights = cached.insights;
+      state.insightDiscussions = cached.discussions || {};
+      return cached;
+    }
+    throw error;
+  }
 }
 
 function storyFromInsight(item) {
@@ -383,6 +566,39 @@ function translationFromInsight(item) {
   };
 }
 
+function canUseInitialHomeData() {
+  return state.activeView === "home"
+    && state.activeTopic === "frontpage"
+    && state.pointsSort === "desc"
+    && !el.searchInput.value.trim()
+    && state.initialData?.home?.stories?.length;
+}
+
+function applyInitialHomeData() {
+  if (!canUseInitialHomeData()) return false;
+  const home = state.initialData.home;
+  state.insights = state.initialData.insights || null;
+  state.insightDiscussions = state.initialData.insightDiscussions || {};
+  el.toolbar.hidden = false;
+  el.feedTitle.textContent = "首页精选";
+  renderStories(home.stories || [], home.translations || {}, home.freshness || {}, home.discussions || {}, { animate: false });
+  saveRecentCache(storyUrl(), {
+    stories: home.stories || [],
+    translations: home.translations || {},
+    freshness: home.freshness || {},
+    discussions: home.discussions || {}
+  });
+  if (state.insights) {
+    saveRecentCache("/api/insights", {
+      ok: true,
+      insights: state.insights,
+      discussions: state.insightDiscussions,
+      freshness: home.freshness || {}
+    });
+  }
+  return true;
+}
+
 async function renderInsightView(viewId) {
   el.toolbar.hidden = true;
   const label = views.find((view) => view.id === viewId)?.label || "";
@@ -399,6 +615,7 @@ async function renderInsightView(viewId) {
           <p>恢复网络后会继续读取最新快照。</p>
         </div>
       `;
+      updateFeedActions();
       return;
     }
   }
@@ -412,6 +629,7 @@ async function renderInsightView(viewId) {
         <p>后台快照更新后会自动补上。</p>
       </div>
     `;
+    updateFeedActions();
     return;
   }
   const stories = items.map(storyFromInsight);
@@ -432,6 +650,7 @@ function renderFavoritesView() {
         <p>看到值得回看的帖子，点右上角星标即可保存到本机。</p>
       </div>
     `;
+    updateFeedActions();
     return;
   }
   const stories = rows.map((row) => row.story);
@@ -439,6 +658,52 @@ function renderFavoritesView() {
   const discussions = Object.fromEntries(rows.filter((row) => row.discussion).map((row) => [row.story.id, row.discussion]));
   renderStories(stories, translations, { generatedAt: rows[0]?.savedAt, ready: true }, discussions);
   el.feedTitle.textContent = "收藏";
+  updateFeedActions();
+}
+
+function markdownEscape(value = "") {
+  return String(value).replace(/\r?\n/g, " ").trim();
+}
+
+function exportFavorites() {
+  const rows = Array.from(state.favorites.values()).sort((a, b) => Date.parse(b.savedAt || "0") - Date.parse(a.savedAt || "0"));
+  if (!rows.length) {
+    showToast("暂无收藏可导出");
+    return;
+  }
+  const lines = [
+    "# 乔木 HN 速读收藏",
+    "",
+    `导出时间：${new Date().toLocaleString("zh-CN")}`,
+    `收藏数量：${rows.length}`,
+    ""
+  ];
+  rows.forEach((row, index) => {
+    const story = row.story || {};
+    const translation = row.translation || {};
+    const title = translation.titleZh || story.title || `收藏 ${index + 1}`;
+    const commentsUrl = story.hnId ? `https://news.ycombinator.com/item?id=${story.hnId}` : story.commentsUrl;
+    lines.push(`## ${index + 1}. ${markdownEscape(title)}`);
+    if (story.title && story.title !== title) lines.push(`原题：${markdownEscape(story.title)}`);
+    if (translation.summaryZh) lines.push(`摘要：${markdownEscape(translation.summaryZh)}`);
+    lines.push(`链接：${story.url || ""}`);
+    if (commentsUrl) lines.push(`讨论：${commentsUrl}`);
+    lines.push(`数据：${story.points ?? 0} points · ${story.comments ?? 0} 评论 · ${story.domain || ""}`);
+    if (row.savedAt) lines.push(`收藏时间：${new Date(row.savedAt).toLocaleString("zh-CN")}`);
+    lines.push("");
+  });
+
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `qiaomu-hn-favorites-${stamp}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1200);
+  showToast("已导出收藏");
 }
 
 async function loadCurrentView({ silent = false } = {}) {
@@ -689,15 +954,24 @@ function debounce(fn, delay = 300) {
   };
 }
 
+const persistReadingProgress = debounce(updateReadingProgressFromScroll, 450);
+
 async function init() {
   loadFavorites();
+  loadReadingProgress();
   readInitialUrlState();
+  state.initialData = readInitialData();
   renderViewTabs();
   setSortButton();
   renderIcons();
   updateInstallButton();
+  const usedInitialHome = applyInitialHomeData();
   loadInsights().catch(() => {});
-  await loadCurrentView();
+  if (usedInitialHome) {
+    loadStories({ silent: true }).catch(() => {});
+  } else {
+    await loadCurrentView();
+  }
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/service-worker.js").catch(() => {});
@@ -744,6 +1018,10 @@ document.addEventListener("click", (event) => {
     if (state.activeView !== "home") state.activeView = "home";
     syncUrlState({ replace: true });
     loadCurrentView();
+  } else if (action === "export-favorites") {
+    exportFavorites();
+  } else if (action === "continue-reading") {
+    continueReading();
   }
 });
 
@@ -759,6 +1037,11 @@ el.storyList.addEventListener("click", (event) => {
     showToast(next ? "已收藏" : "已取消收藏");
     if (state.activeView === "favorites" && !next) renderFavoritesView();
     return;
+  }
+
+  const storyNode = event.target.closest(".story");
+  if (storyNode && event.target.closest("a, [data-toggle-comments]")) {
+    markStoryProgress(storyNode.dataset.storyId);
   }
 
   const tab = event.target.closest("[data-discussion-tab]");
@@ -799,6 +1082,7 @@ window.addEventListener("appinstalled", () => {
   updateInstallButton();
 });
 window.matchMedia("(display-mode: standalone)").addEventListener?.("change", updateInstallButton);
+window.addEventListener("scroll", persistReadingProgress, { passive: true });
 window.addEventListener("popstate", () => {
   state.expandedComments.clear();
   readInitialUrlState();

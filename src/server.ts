@@ -16,7 +16,7 @@ import { topics } from "./topics.js";
 
 const app = express();
 const publicDir = path.resolve("public");
-const appVersion = "0.5.6";
+const appVersion = "0.5.7";
 
 app.disable("x-powered-by");
 app.use(compression());
@@ -47,20 +47,60 @@ function publicUrl(pathname = "/") {
   return new URL(pathname, config.publicBaseUrl.endsWith("/") ? config.publicBaseUrl : `${config.publicBaseUrl}/`).toString();
 }
 
-async function renderHtml(fileName: string) {
+function escapeJsonForHtml(value: unknown) {
+  return JSON.stringify(value ?? null)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+async function buildInitialData() {
+  const snapshot = await getFeedSnapshot();
+  const home = selectSnapshotStories(snapshot, {
+    topic: "frontpage",
+    pointsSort: "desc",
+    limit: 30
+  });
+  const insights = buildHomeInsights(snapshot);
+  const insightStories = [...insights.rising, ...insights.productRadar]
+    .map((item) => snapshot.stories[item.id])
+    .filter((story): story is Story => Boolean(story));
+
+  return {
+    version: appVersion,
+    generatedAt: new Date().toISOString(),
+    home: {
+      stories: home.stories,
+      translations: home.translations,
+      discussions: discussionMetaForStories(snapshot, home.stories),
+      freshness: publicSnapshotMeta(snapshot)
+    },
+    insights,
+    insightDiscussions: discussionMetaForStories(snapshot, insightStories)
+  };
+}
+
+async function renderHtml(fileName: string, options: { initialData?: unknown } = {}) {
   const html = await fs.readFile(path.join(publicDir, fileName), "utf8");
   const umamiScript = config.umamiWebsiteId
     ? `<script defer src="https://umami.qiaomu.ai/script.js" data-website-id="${config.umamiWebsiteId}" data-domains="hn.qiaomu.ai"></script>`
     : "";
+  const initialData = options.initialData
+    ? `<script id="__HN_INITIAL_DATA__" type="application/json">${escapeJsonForHtml(options.initialData)}</script>`
+    : "";
   return html
     .replaceAll("%PUBLIC_BASE_URL%", config.publicBaseUrl)
     .replaceAll("%UMAMI_SCRIPT%", umamiScript)
+    .replaceAll("%INITIAL_DATA%", initialData)
     .replaceAll("%APP_VERSION%", appVersion);
 }
 
 app.get("/", async (_req, res, next) => {
   try {
-    res.type("html").send(await renderHtml("index.html"));
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=3600");
+    res.type("html").send(await renderHtml("index.html", { initialData: await buildInitialData() }));
   } catch (error) {
     next(error);
   }
@@ -68,6 +108,7 @@ app.get("/", async (_req, res, next) => {
 
 app.get("/api-docs", async (_req, res, next) => {
   try {
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
     res.type("html").send(await renderHtml("api.html"));
   } catch (error) {
     next(error);
@@ -168,6 +209,7 @@ function discussionMetaForStories(snapshot: Awaited<ReturnType<typeof getFeedSna
 
 app.get("/api/insights", async (_req, res, next) => {
   try {
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=3600");
     const snapshot = await getFeedSnapshot();
     const insights = buildHomeInsights(snapshot);
     const stories = [...insights.rising, ...insights.productRadar]
@@ -186,6 +228,7 @@ app.get("/api/insights", async (_req, res, next) => {
 
 app.get("/api/stories", async (req, res, next) => {
   try {
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=3600");
     const snapshot = await getFeedSnapshot();
     const result = selectSnapshotStories(snapshot, {
       topic: String(req.query.topic || "frontpage"),
@@ -216,6 +259,7 @@ app.get("/api/stories", async (req, res, next) => {
 
 app.get("/api/stories/:id/comments", async (req, res, next) => {
   try {
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
     const snapshot = await getFeedSnapshot();
     const story = findSnapshotStory(snapshot, req.params.id);
     if (!story) {

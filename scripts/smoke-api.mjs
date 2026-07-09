@@ -40,6 +40,7 @@ async function waitForSnapshot() {
 }
 
 await check("/api/health", (data) => data.ok === true && data.translation?.model);
+await checkText("/", (text) => text.includes('__HN_INITIAL_DATA__') && text.includes('"home"') && !text.includes("%INITIAL_DATA%"));
 await check("/manifest.webmanifest", (data) => data.name === "乔木 HN 速读" && data.icons?.some((icon) => icon.purpose === "maskable") && data.screenshots?.length >= 2);
 await checkText("/robots.txt", (text) => text.includes("Disallow: /api/") && text.includes("Sitemap:"));
 await checkText("/sitemap.xml", (text) => text.includes("<urlset") && text.includes("/api-docs"));

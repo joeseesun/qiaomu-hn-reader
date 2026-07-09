@@ -60,6 +60,7 @@
       }
     </script>
     <script defer src="/lucide-icons.js?v=%APP_VERSION%"></script>
+    %INITIAL_DATA%
     <script type="module" src="/app.js?v=%APP_VERSION%"></script>
   </head>
   <body>
@@ -99,8 +100,20 @@
 
       <!-- feed 状态头 -->
       <div class="feed-head">
-        <h2 class="feed-title" data-feed-title>首页精选</h2>
-        <span class="feed-count" data-feed-count></span>
+        <div class="feed-head-main">
+          <h2 class="feed-title" data-feed-title>首页精选</h2>
+          <span class="feed-count" data-feed-count></span>
+        </div>
+        <div class="feed-actions">
+          <button class="feed-action-btn" type="button" data-action="continue-reading" hidden>
+            <span data-lucide="history" aria-hidden="true"></span>
+            <span>继续阅读</span>
+          </button>
+          <button class="feed-action-btn" type="button" data-action="export-favorites" hidden>
+            <span data-lucide="download" aria-hidden="true"></span>
+            <span>导出收藏</span>
+          </button>
+        </div>
       </div>
 
       <!-- 新闻流 -->
