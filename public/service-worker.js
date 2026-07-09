@@ -1,5 +1,34 @@
-const CACHE = "hn-qiaomu-v0.5.2";
-const ASSETS = ["/", "/styles.css?v=0.5.2", "/lucide-icons.js?v=0.5.2", "/app.js?v=0.5.2", "/favicon.svg"];
+const CACHE = "hn-qiaomu-v0.5.3";
+const ASSETS = [
+  "/",
+  "/offline.html",
+  "/styles.css?v=0.5.3",
+  "/lucide-icons.js?v=0.5.3",
+  "/app.js?v=0.5.3",
+  "/favicon.svg",
+  "/manifest.webmanifest",
+  "/icons/apple-touch-icon.png",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/maskable-512.png"
+];
+
+function shouldCacheApi(url) {
+  return url.pathname === "/api/insights"
+    || url.pathname === "/api/status"
+    || url.pathname === "/api/stories"
+    || url.pathname === "/api/topics"
+    || /^\/api\/stories\/[^/]+\/comments$/.test(url.pathname);
+}
+
+async function fetchAndCache(request, cacheKey = request) {
+  const response = await fetch(request);
+  if (response.ok) {
+    const copy = response.clone();
+    caches.open(CACHE).then((cache) => cache.put(cacheKey, copy)).catch(() => {});
+  }
+  return response;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
@@ -14,9 +43,30 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  if (url.pathname.startsWith("/api/")) return;
+  if (url.pathname.startsWith("/api/")) {
+    if (!shouldCacheApi(url)) return;
+    event.respondWith(
+      fetchAndCache(event.request).catch(async () => (
+        await caches.match(event.request)
+      ) || new Response(JSON.stringify({ error: "offline" }), {
+        status: 503,
+        headers: { "content-type": "application/json; charset=utf-8" }
+      }))
+    );
+    return;
+  }
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetchAndCache(event.request, "/")
+        .catch(async () => (await caches.match("/")) || caches.match("/offline.html"))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    caches.match(event.request).then((cached) => cached || fetchAndCache(event.request))
   );
 });

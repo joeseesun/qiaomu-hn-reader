@@ -31,7 +31,8 @@
 | 最佳评论 | 从缓存评论里按长度、观点密度、经验/取舍信号选出最多 4 条 |
 | 收藏 | 纯本地 `localStorage` 收藏，不需要登录 |
 | 风险过滤 | 默认过滤政治、军事和高争议社会议题，降低公开站运营风险 |
-| PWA 基础 | favicon、manifest、service worker、移动端阅读布局 |
+| PWA 安装 | manifest、maskable 图标、Apple touch icon、离线兜底页和 service worker 缓存 |
+| SEO 基础 | canonical、Open Graph、JSON-LD、robots.txt、sitemap.xml 和分享图 |
 
 ## 产品截图
 
@@ -119,6 +120,10 @@ public/
   app.js                 Reader UI
   styles.css             Qiaomu note-reader design system
   lucide-icons.js        Minimal local lucide icon renderer
+  manifest.webmanifest   PWA install metadata
+  offline.html           Offline fallback page
+  icons/                 PWA icons and Apple touch icon
+  screenshots/           PWA install screenshots
 deploy/
   hn-qiaomu.service      systemd unit example
   nginx-hn.qiaomu.ai.conf

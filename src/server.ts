@@ -16,6 +16,7 @@ import { topics } from "./topics.js";
 
 const app = express();
 const publicDir = path.resolve("public");
+const appVersion = "0.5.3";
 
 app.disable("x-powered-by");
 app.use(compression());
@@ -42,6 +43,10 @@ function parsePointsSort(value: unknown) {
   return value === "asc" || value === "desc" ? value : undefined;
 }
 
+function publicUrl(pathname = "/") {
+  return new URL(pathname, config.publicBaseUrl.endsWith("/") ? config.publicBaseUrl : `${config.publicBaseUrl}/`).toString();
+}
+
 async function renderHtml(fileName: string) {
   const html = await fs.readFile(path.join(publicDir, fileName), "utf8");
   const umamiScript = config.umamiWebsiteId
@@ -50,7 +55,7 @@ async function renderHtml(fileName: string) {
   return html
     .replaceAll("%PUBLIC_BASE_URL%", config.publicBaseUrl)
     .replaceAll("%UMAMI_SCRIPT%", umamiScript)
-    .replaceAll("%APP_VERSION%", "0.5.2");
+    .replaceAll("%APP_VERSION%", appVersion);
 }
 
 app.get("/", async (_req, res, next) => {
@@ -69,13 +74,41 @@ app.get("/api-docs", async (_req, res, next) => {
   }
 });
 
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send([
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /api/",
+    `Sitemap: ${publicUrl("/sitemap.xml")}`,
+    ""
+  ].join("\n"));
+});
+
+app.get("/sitemap.xml", (_req, res) => {
+  const updatedAt = new Date().toISOString();
+  const urls = [
+    { loc: publicUrl("/"), priority: "1.0", changefreq: "hourly" },
+    { loc: publicUrl("/api-docs"), priority: "0.4", changefreq: "weekly" }
+  ];
+  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((item) => `  <url>
+    <loc>${item.loc}</loc>
+    <lastmod>${updatedAt}</lastmod>
+    <changefreq>${item.changefreq}</changefreq>
+    <priority>${item.priority}</priority>
+  </url>`).join("\n")}
+</urlset>
+`);
+});
+
 app.use(express.static(publicDir, { index: false, maxAge: config.nodeEnv === "production" ? "1h" : 0 }));
 
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
     service: "hn-qiaomu",
-    version: "0.5.2",
+    version: appVersion,
     time: new Date().toISOString(),
     translation: {
       enabled: isTranslationEnabled(),

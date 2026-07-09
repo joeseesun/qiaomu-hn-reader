@@ -1096,6 +1096,85 @@ button {
   .footer a:hover { color: var(--accent); }
 }
 
+/* ===== Offline fallback ===== */
+.offline-body {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.offline-shell {
+  width: min(100%, 520px);
+}
+
+.offline-brand {
+  width: fit-content;
+  margin-bottom: 18px;
+}
+
+.offline-panel {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow-card);
+}
+
+.offline-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.offline-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.offline-panel h1 {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.offline-panel p {
+  max-width: 34em;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+.offline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  margin-top: 22px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  color: var(--card);
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform 120ms var(--ease-out), background 150ms var(--ease-out);
+}
+
+.offline-action:active { transform: scale(0.97); }
+
+@media (hover: hover) and (pointer: fine) {
+  .offline-action:hover { background: var(--accent); }
+}
+
 /* ===== Toast ===== */
 .toast {
   position: fixed;
