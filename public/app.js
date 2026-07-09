@@ -26,6 +26,8 @@ const state = {
   translationCache: {}
 };
 
+const validViews = new Set(views.map((view) => view.id));
+
 const el = {
   viewTabs: document.querySelector("[data-view-tabs]"),
   storyList: document.querySelector("[data-story-list]"),
@@ -97,6 +99,33 @@ function showToast(text) {
 
 function renderIcons(root = document) {
   window.qmLucide?.render(root);
+}
+
+function readInitialUrlState() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  const query = params.get("q");
+  const sort = params.get("sort");
+  state.activeView = "home";
+  state.pointsSort = "desc";
+  el.searchInput.value = "";
+  if (validViews.has(view)) state.activeView = view;
+  if (query) {
+    state.activeView = "home";
+    el.searchInput.value = query;
+  }
+  if (sort === "asc" || sort === "desc") state.pointsSort = sort;
+}
+
+function syncUrlState({ replace = false } = {}) {
+  const params = new URLSearchParams();
+  const query = el.searchInput.value.trim();
+  if (state.activeView !== "home") params.set("view", state.activeView);
+  if (query) params.set("q", query);
+  if (state.pointsSort !== "desc") params.set("sort", state.pointsSort);
+  const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({}, "", nextUrl);
 }
 
 function loadFavorites() {
@@ -341,12 +370,24 @@ function translationFromInsight(item) {
 
 async function renderInsightView(viewId) {
   el.toolbar.hidden = true;
+  const label = views.find((view) => view.id === viewId)?.label || "";
+  el.feedTitle.textContent = label;
   if (!state.insights) {
     setSkeleton(4);
-    await loadInsights();
+    try {
+      await loadInsights();
+    } catch {
+      el.feedCount.textContent = "";
+      el.storyList.innerHTML = `
+        <div class="state">
+          <h3>这一栏暂时没读到</h3>
+          <p>恢复网络后会继续读取最新快照。</p>
+        </div>
+      `;
+      return;
+    }
   }
   const items = state.insights?.[viewId] || [];
-  const label = views.find((view) => view.id === viewId)?.label || "";
   el.feedTitle.textContent = label;
   if (!items.length) {
     el.feedCount.textContent = "";
@@ -393,9 +434,11 @@ async function loadCurrentView({ silent = false } = {}) {
 }
 
 async function setActiveView(viewId) {
+  if (!validViews.has(viewId)) return;
   state.activeView = viewId;
   state.expandedComments.clear();
   if (viewId !== "home") el.searchInput.value = "";
+  syncUrlState();
   await loadCurrentView();
 }
 
@@ -633,11 +676,12 @@ function debounce(fn, delay = 300) {
 
 async function init() {
   loadFavorites();
+  readInitialUrlState();
   renderViewTabs();
   setSortButton();
   renderIcons();
   loadInsights().catch(() => {});
-  await loadStories();
+  await loadCurrentView();
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/service-worker.js").catch(() => {});
@@ -670,6 +714,7 @@ document.addEventListener("click", (event) => {
     state.expandedComments.clear();
     setSortButton();
     if (state.activeView !== "home") state.activeView = "home";
+    syncUrlState({ replace: true });
     loadCurrentView();
   }
 });
@@ -712,9 +757,16 @@ const reloadFromFilters = debounce(() => {
     state.activeView = "home";
     renderViewTabs();
   }
+  syncUrlState({ replace: true });
   loadStories();
 }, 320);
 el.searchInput.addEventListener("input", reloadFromFilters);
+window.addEventListener("popstate", () => {
+  state.expandedComments.clear();
+  readInitialUrlState();
+  setSortButton();
+  loadCurrentView().catch(() => showToast("这一栏暂时没读到"));
+});
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, select, textarea")) return;
   if (event.key === "r" || event.key === "R") {

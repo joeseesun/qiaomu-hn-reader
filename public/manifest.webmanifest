@@ -1,18 +1,74 @@
 {
   "name": "乔木 HN 速读",
   "short_name": "HN 速读",
-  "start_url": "/",
+  "id": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#faf9f7",
   "theme_color": "#faf9f7",
-  "description": "中文速读 Hacker News 最新和热门内容。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "categories": ["news", "productivity", "utilities"],
+  "description": "面向中文开发者和产品人的 Hacker News 速读：每小时同步热门内容，整理中文摘要、升温榜、产品雷达和评论速读。",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/qiaomu-hn-desktop.png",
+      "sizes": "1365x920",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "桌面端中文 Hacker News 阅读流"
+    },
+    {
+      "src": "/screenshots/qiaomu-hn-mobile.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "移动端中文 Hacker News 阅读流"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "首页精选",
+      "short_name": "首页",
+      "description": "打开中文 Hacker News 首页精选。",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "升温榜",
+      "short_name": "升温",
+      "description": "查看当前升温最快的讨论。",
+      "url": "/?view=rising",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "产品雷达",
+      "short_name": "雷达",
+      "description": "查看 Show HN 和产品工具相关内容。",
+      "url": "/?view=productRadar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

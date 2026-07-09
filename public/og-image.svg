@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">乔木 HN 速读</title>
+  <desc id="desc">中文 Hacker News 阅读器分享图</desc>
+  <rect width="1200" height="630" fill="#faf9f7"/>
+  <circle cx="1038" cy="112" r="86" fill="#d4661a" opacity=".10"/>
+  <circle cx="126" cy="548" r="120" fill="#d4661a" opacity=".08"/>
+  <g transform="translate(120 104)">
+    <circle cx="18" cy="23" r="8" fill="#d4661a"/>
+    <text x="42" y="34" fill="#232323" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="32" font-weight="600">乔木 HN 速读</text>
+  </g>
+  <text x="120" y="262" fill="#232323" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="82" font-weight="650">Hacker News</text>
+  <text x="120" y="358" fill="#232323" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif" font-size="82" font-weight="650">中文速读</text>
+  <text x="124" y="432" fill="#6e6a63" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="30" font-weight="400">首页精选 · 升温榜 · 产品雷达 · 评论速读</text>
+  <g transform="translate(832 176)">
+    <rect width="248" height="248" rx="48" fill="#ffffff" stroke="rgba(0,0,0,.06)" stroke-width="2"/>
+    <g fill="none" stroke="#d4661a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(64 54) scale(5.2)">
+      <path d="M15 18h-5"/>
+      <path d="M18 14h-8"/>
+      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2"/>
+      <rect width="8" height="4" x="10" y="6" rx="1"/>
+    </g>
+    <text x="124" y="202" fill="#232323" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', sans-serif" font-size="24" font-weight="600" text-anchor="middle">hn.qiaomu.ai</text>
+  </g>
+</svg>

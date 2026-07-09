@@ -9,6 +9,21 @@ async function check(path, predicate) {
   return data;
 }
 
+async function checkText(path, predicate) {
+  const response = await fetch(`${baseUrl}${path}`);
+  if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+  const text = await response.text();
+  if (predicate && !predicate(text)) throw new Error(`${path} returned unexpected content`);
+  console.log(`ok ${path}`);
+  return text;
+}
+
+async function checkAsset(path) {
+  const response = await fetch(`${baseUrl}${path}`, { method: "HEAD" });
+  if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+  console.log(`ok ${path}`);
+}
+
 async function waitForSnapshot() {
   const started = Date.now();
   let lastStatus = "";
@@ -25,6 +40,12 @@ async function waitForSnapshot() {
 }
 
 await check("/api/health", (data) => data.ok === true && data.translation?.model);
+await check("/manifest.webmanifest", (data) => data.name === "乔木 HN 速读" && data.icons?.some((icon) => icon.purpose === "maskable") && data.screenshots?.length >= 2);
+await checkText("/robots.txt", (text) => text.includes("Disallow: /api/") && text.includes("Sitemap:"));
+await checkText("/sitemap.xml", (text) => text.includes("<urlset") && text.includes("/api-docs"));
+await checkAsset("/icons/icon-192.png");
+await checkAsset("/icons/icon-512.png");
+await checkAsset("/icons/maskable-512.png");
 await waitForSnapshot();
 await check("/api/status", (data) => data.ok === true && data.snapshot?.ready === true);
 await check(

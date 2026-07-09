@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Qiaomu HN Reader Maskable Icon</title>
+  <rect width="512" height="512" fill="#faf9f7"/>
+  <circle cx="384" cy="128" r="58" fill="#d4661a" opacity=".14"/>
+  <circle cx="124" cy="390" r="72" fill="#d4661a" opacity=".10"/>
+  <g fill="none" stroke="#d4661a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(132 128) scale(10.3)">
+    <path d="M15 18h-5"/>
+    <path d="M18 14h-8"/>
+    <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2"/>
+    <rect width="8" height="4" x="10" y="6" rx="1"/>
+  </g>
+</svg>
