@@ -99,7 +99,10 @@ function toInsightStory(snapshot: FeedSnapshot, story: Story, kind: "rising" | "
 function productStories(snapshot: FeedSnapshot) {
   const fromProductFeeds = uniqueStories([...topicStories(snapshot, "show"), ...topicStories(snapshot, "launches")]);
   const fromCurrent = allVisibleStories(snapshot).filter((story) => PRODUCT_TITLE_RE.test(story.title));
-  return uniqueStories([...fromProductFeeds, ...fromCurrent]);
+  const fallback = allVisibleStories(snapshot)
+    .filter((story) => (story.comments || 0) > 0 || (story.points || 0) > 0)
+    .sort((a, b) => heatScore(b) - heatScore(a));
+  return uniqueStories([...fromProductFeeds, ...fromCurrent, ...fallback]);
 }
 
 export function buildHomeInsights(snapshot: FeedSnapshot): HomeInsights {
