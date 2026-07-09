@@ -124,14 +124,17 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown";
         draft.errors.push(`${topic.id}: ${message}`);
-        draft.topics[topic.id] = {
-          topicId: topic.id,
-          updatedAt: new Date().toISOString(),
-          storyIds: [],
-          fetchedCount: 0,
-          filteredCount: 0,
-          error: message
-        };
+        const previousTopic = draft.topics[topic.id] || base.topics[topic.id];
+        draft.topics[topic.id] = previousTopic
+          ? { ...previousTopic, error: message }
+          : {
+              topicId: topic.id,
+              updatedAt: new Date().toISOString(),
+              storyIds: [],
+              fetchedCount: 0,
+              filteredCount: 0,
+              error: message
+            };
         console.warn(`[prefetch] topic=${topic.id} error: ${message}`);
       }
 

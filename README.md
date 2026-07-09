@@ -29,9 +29,10 @@
 | 讨论速读 | 把评论转写成中文摘要，只在文章已生成时开放点击 |
 | 精选评论观点 | 在速读下方引用高价值评论的核心观点，辅助判断是否继续读 |
 | 最佳评论 | 从缓存评论里按长度、观点密度、经验/取舍信号选出最多 4 条 |
-| 收藏 | 纯本地 `localStorage` 收藏，不需要登录 |
+| 首屏快照 | 首页 HTML 内嵌最近快照，前端先同步渲染，再后台静默刷新 |
+| 收藏与进度 | 纯本地收藏、Markdown 导出和按视图保存阅读进度，不需要登录 |
 | 风险/噪声过滤 | 默认过滤政治、军事、高争议社会议题和招聘广告，降低公开站运营风险 |
-| PWA 安装 | manifest、maskable 图标、Apple touch icon、离线兜底页和 service worker 缓存 |
+| PWA 安装 | manifest、maskable 图标、Apple touch icon、离线兜底页、最近快照和 service worker 缓存 |
 | SEO 基础 | canonical、Open Graph、JSON-LD、robots.txt、sitemap.xml 和分享图 |
 
 ## 产品截图
@@ -54,6 +55,7 @@
 4. 选出评论预热候选：优先首页前 70%，再按 `points * 1.2 + comments * 2.4 - ageHours * 1.8` 排序补齐。
 5. 每个候选默认抓取前 24 条评论，翻译评论并生成讨论速读文章。
 6. 讨论文章按帖子和评论内容签名缓存到 `.data/discussion-articles.json`；评论没变则直接复用。
+7. 首页 HTML 内嵌默认首页快照，前端同步渲染首屏；API 请求只做静默刷新和兜底更新。
 
 前端不会实时调用 DeepSeek，也不会把 API key 暴露给浏览器。
 

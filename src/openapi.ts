@@ -5,7 +5,7 @@ export function openApiDocument() {
     openapi: "3.1.0",
     info: {
       title: "乔木 HN 速读 API",
-      version: "0.5.6",
+      version: "0.5.7",
       description: "面向中文 Hacker News 速读网站和未来 iOS App 的公共 API。"
     },
     servers: [{ url: config.publicBaseUrl }],
