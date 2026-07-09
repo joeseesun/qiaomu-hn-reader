@@ -24,7 +24,8 @@ export type HomeInsights = {
   productRadar: InsightStory[];
 };
 
-const PRODUCT_TITLE_RE = /\b(show hn|launch hn|yc\s+[sw]\d{2}|api|sdk|agent|browser|editor|database|devtool|developer|open source|github|tool|app)\b/i;
+const INSIGHT_LIMIT = 10;
+const PRODUCT_TITLE_RE = /\b(show hn|launch hn|api|sdk|agent|browser|editor|database|devtool|developer|open source|github|tool|app)\b/i;
 
 function uniqueStories(stories: Story[]) {
   const seen = new Set<string>();
@@ -109,12 +110,12 @@ export function buildHomeInsights(snapshot: FeedSnapshot): HomeInsights {
   const rising = all
     .filter((story) => (story.comments || 0) > 0 || (story.points || 0) > 0)
     .sort((a, b) => heatScore(b) - heatScore(a))
-    .slice(0, 5)
+    .slice(0, INSIGHT_LIMIT)
     .map((story) => toInsightStory(snapshot, story, "rising"));
 
   const productRadar = productStories(snapshot)
     .sort((a, b) => productScore(b) - productScore(a))
-    .slice(0, 5)
+    .slice(0, INSIGHT_LIMIT)
     .map((story) => toInsightStory(snapshot, story, "product"));
 
   return {

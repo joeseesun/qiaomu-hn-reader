@@ -54,7 +54,13 @@ await check(
 );
 await check(
   "/api/insights",
-  (data) => data.ok === true && Array.isArray(data.insights?.rising) && Array.isArray(data.insights?.productRadar) && !("brief" in data.insights)
+  (data) =>
+    data.ok === true &&
+    Array.isArray(data.insights?.rising) &&
+    data.insights.rising.length <= 10 &&
+    Array.isArray(data.insights?.productRadar) &&
+    data.insights.productRadar.length <= 10 &&
+    !("brief" in data.insights)
 );
 await check(
   "/api/stories?topic=frontpage&limit=3",
