@@ -16,6 +16,7 @@ const state = {
   storiesAbort: null,
   insightsAbort: null,
   refreshing: false,
+  installPromptEvent: null,
   expandedComments: new Map(),
   commentsAbort: new Map(),
   insights: null,
@@ -37,6 +38,7 @@ const el = {
   toolbar: document.querySelector(".toolbar"),
   toast: document.querySelector("[data-toast]"),
   refreshBtn: document.querySelector('[data-action="refresh"]'),
+  installAppBtn: document.querySelector('[data-action="install-app"]'),
   sortPointsBtn: document.querySelector('[data-action="sort-points"]')
 };
 
@@ -99,6 +101,19 @@ function showToast(text) {
 
 function renderIcons(root = document) {
   window.qmLucide?.render(root);
+}
+
+function isPwaStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function setInstallButtonVisible(visible) {
+  if (!el.installAppBtn) return;
+  el.installAppBtn.hidden = !visible;
+}
+
+function updateInstallButton() {
+  setInstallButtonVisible(Boolean(state.installPromptEvent) && !isPwaStandalone());
 }
 
 function readInitialUrlState() {
@@ -680,6 +695,7 @@ async function init() {
   renderViewTabs();
   setSortButton();
   renderIcons();
+  updateInstallButton();
   loadInsights().catch(() => {});
   await loadCurrentView();
 
@@ -709,6 +725,18 @@ document.addEventListener("click", (event) => {
       }, 500);
       showToast("已刷新");
     });
+  } else if (action === "install-app") {
+    if (!state.installPromptEvent || isPwaStandalone()) {
+      updateInstallButton();
+      return;
+    }
+    const promptEvent = state.installPromptEvent;
+    state.installPromptEvent = null;
+    updateInstallButton();
+    promptEvent.prompt();
+    promptEvent.userChoice.then((choice) => {
+      if (choice.outcome === "accepted") showToast("正在安装");
+    }).catch(() => {});
   } else if (action === "sort-points") {
     state.pointsSort = state.pointsSort === "desc" ? "asc" : "desc";
     state.expandedComments.clear();
@@ -761,6 +789,16 @@ const reloadFromFilters = debounce(() => {
   loadStories();
 }, 320);
 el.searchInput.addEventListener("input", reloadFromFilters);
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  state.installPromptEvent = event;
+  updateInstallButton();
+});
+window.addEventListener("appinstalled", () => {
+  state.installPromptEvent = null;
+  updateInstallButton();
+});
+window.matchMedia("(display-mode: standalone)").addEventListener?.("change", updateInstallButton);
 window.addEventListener("popstate", () => {
   state.expandedComments.clear();
   readInitialUrlState();
