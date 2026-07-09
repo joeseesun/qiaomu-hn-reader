@@ -2,7 +2,7 @@ import type { Story } from "./hnrss.js";
 
 export type RiskAssessment = {
   blocked: boolean;
-  category: "politics" | "military" | "sensitive" | "none";
+  category: "politics" | "military" | "sensitive" | "hiring" | "none";
   reason?: string;
   matched?: string[];
 };
@@ -64,6 +64,27 @@ const sensitivePatterns = [
   /性别认同|性少数|社会议题|身份政治/
 ];
 
+const hiringStrongTitlePatterns = [
+  /\bis hiring\b/i,
+  /\bwe(?:'re| are) hiring\b/i,
+  /\bhiring (?:a|an|in|for)\b/i,
+  /\bwho is hiring\??\b/i
+];
+
+const hiringRolePatterns = [
+  /\bfounding (?:engineer|designer|product|sales|marketer)\b/i,
+  /\bsenior (?:software )?engineer\b/i,
+  /\bstaff (?:software )?engineer\b/i,
+  /\bfull[- ]time\b/i,
+  /\bremote\s*(?:\(|-|,)/i
+];
+
+const hiringUrlPatterns = [
+  /\/jobs?(?:\/|$)/i,
+  /\/careers?(?:\/|$)/i,
+  /ycombinator\.com\/companies\/[^/\s]+\/jobs?(?:\/|$)/i
+];
+
 function collectMatches(text: string, patterns: RegExp[]) {
   return patterns
     .map((pattern) => text.match(pattern)?.[0])
@@ -71,8 +92,34 @@ function collectMatches(text: string, patterns: RegExp[]) {
     .slice(0, 4);
 }
 
+function collectHiringMatches(story: Story) {
+  const title = story.title;
+  const urlText = `${story.domain} ${story.url}`;
+  const strongTitle = collectMatches(title, hiringStrongTitlePatterns);
+  const url = collectMatches(urlText, hiringUrlPatterns);
+  const role = collectMatches(title, hiringRolePatterns);
+  const ycBatch = /\byc\s+[a-z]\d{2}\b/i.test(title);
+  const lowEngagement = (story.points || 0) === 0 && (story.comments || 0) === 0;
+
+  if (strongTitle.length) return [...strongTitle, ...url, ...role].slice(0, 4);
+  if (url.length && (ycBatch || role.length || lowEngagement)) return [...url, ...role].slice(0, 4);
+  if (ycBatch && role.length) return role.slice(0, 4);
+
+  return [];
+}
+
 export function assessStoryRisk(story: Story): RiskAssessment {
   const text = `${story.title} ${story.domain} ${story.url}`.toLowerCase();
+  const hiring = collectHiringMatches(story);
+  if (hiring.length) {
+    return {
+      blocked: true,
+      category: "hiring",
+      reason: "招聘广告或岗位帖默认不进入公开首页",
+      matched: hiring
+    };
+  }
+
   const military = collectMatches(text, militaryPatterns);
   if (military.length) {
     return {
