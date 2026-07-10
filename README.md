@@ -80,6 +80,7 @@ npm start
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `PORT` | `3000` | Node 服务端口 |
+| `HOST` | `127.0.0.1` | Node 监听地址，默认仅允许本机反向代理访问 |
 | `PUBLIC_BASE_URL` | `http://127.0.0.1:3000` | 页面 canonical、OpenAPI server 地址 |
 | `HNRSS_BASE_URL` | `https://hnrss.org` | HNRSS story 与评论 feed 地址 |
 | `HN_REFRESH_INTERVAL_MS` | `3600000` | 后台快照刷新周期 |
