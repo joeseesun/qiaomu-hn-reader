@@ -81,15 +81,39 @@ function scoreStory(story: Story) {
   return points * 1.2 + comments * 2.4 - ageHours * 1.8;
 }
 
-function pickCommentCandidates(snapshot: FeedSnapshot) {
+function compareByHomepageRank(a: Story, b: Story) {
+  const pointDelta = (b.points || 0) - (a.points || 0);
+  if (pointDelta !== 0) return pointDelta;
+  const commentDelta = (b.comments || 0) - (a.comments || 0);
+  if (commentDelta !== 0) return commentDelta;
+  return Date.parse(b.publishedAt || "0") - Date.parse(a.publishedAt || "0");
+}
+
+function needsDiscussionWarmup(snapshot: FeedSnapshot, story: Story) {
+  const comments = snapshot.comments[story.id];
+  const article = snapshot.articles[story.id];
+  return !comments
+    || comments.status === "error"
+    || !comments.comments.length
+    || !article
+    || article.status === "error"
+    || article.status === "fallback"
+    || article.status === "disabled";
+}
+
+export function pickCommentCandidates(snapshot: FeedSnapshot) {
   const frontpageIds = snapshot.topics.frontpage?.storyIds || [];
   const preferred = frontpageIds
     .map((id) => snapshot.stories[id])
-    .filter(Boolean)
+    .filter((story): story is Story => Boolean(story && (story.comments || 0) > 0))
+    .sort(compareByHomepageRank)
     .slice(0, Math.ceil(config.commentPrefetchLimit * 0.7));
   const scored = Object.values(snapshot.stories)
     .filter((story) => (story.comments || 0) > 0)
-    .sort((a, b) => scoreStory(b) - scoreStory(a));
+    .sort((a, b) => {
+      const warmupDelta = Number(needsDiscussionWarmup(snapshot, b)) - Number(needsDiscussionWarmup(snapshot, a));
+      return warmupDelta || scoreStory(b) - scoreStory(a);
+    });
 
   const seen = new Set<string>();
   const candidates: Story[] = [];
@@ -111,12 +135,14 @@ let lastRefresh: {
   startedAt: string | null;
   finishedAt: string | null;
   reason: string | null;
+  phase: "idle" | "feeds" | "comments" | "complete";
   status: "idle" | "running" | "ready" | "error";
   error?: string;
 } = {
   startedAt: null,
   finishedAt: null,
   reason: null,
+  phase: "idle",
   status: "idle"
 };
 
@@ -142,6 +168,7 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
       startedAt: draft.startedAt,
       finishedAt: null,
       reason,
+      phase: "feeds",
       status: "running"
     };
     await saveFeedSnapshot(draft);
@@ -200,6 +227,14 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
     draft.generatedAt = new Date().toISOString();
     draft.durationMs = Date.now() - started;
     await saveFeedSnapshot(draft);
+    lastRefresh = {
+      startedAt: draft.startedAt,
+      finishedAt: null,
+      reason,
+      phase: "comments",
+      status: "running",
+      error: draft.errors[0]
+    };
 
     const candidates = pickCommentCandidates(draft);
     for (let i = 0; i < candidates.length; i++) {
@@ -267,8 +302,9 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
     await saveFeedSnapshot(draft);
     lastRefresh = {
       startedAt: draft.startedAt,
-      finishedAt: draft.generatedAt,
+      finishedAt: new Date().toISOString(),
       reason,
+      phase: "complete",
       status: draft.status === "error" ? "error" : "ready",
       error: draft.errors[0]
     };
