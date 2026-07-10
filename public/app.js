@@ -1,7 +1,9 @@
 const FAVORITES_KEY = "qiaomu-hn-favorites-v1";
 const RECENT_CACHE_KEY = "qiaomu-hn-recent-cache-v1";
-const READING_PROGRESS_KEY = "qiaomu-hn-reading-progress-v1";
+const READ_STORIES_KEY = "qiaomu-hn-read-stories-v2";
+const LEGACY_READING_PROGRESS_KEY = "qiaomu-hn-reading-progress-v1";
 const RECENT_CACHE_LIMIT = 8;
+const READ_STORIES_LIMIT = 1000;
 
 const views = [
   { id: "home", label: "首页精选" },
@@ -26,10 +28,11 @@ const state = {
   insightDiscussions: {},
   discussions: {},
   favorites: new Map(),
-  readingProgress: new Map(),
+  readStories: new Map(),
   storyCache: new Map(),
   translationCache: {},
-  initialData: null
+  initialData: null,
+  serviceWorkerUpdateShown: false
 };
 
 const validViews = new Set(views.map((view) => view.id));
@@ -39,14 +42,14 @@ const el = {
   storyList: document.querySelector("[data-story-list]"),
   feedTitle: document.querySelector("[data-feed-title]"),
   feedCount: document.querySelector("[data-feed-count]"),
+  feedStatus: document.querySelector("[data-feed-status]"),
   searchInput: document.querySelector("[data-search-input]"),
   toolbar: document.querySelector(".toolbar"),
   toast: document.querySelector("[data-toast]"),
   refreshBtn: document.querySelector('[data-action="refresh"]'),
   installAppBtn: document.querySelector('[data-action="install-app"]'),
   sortPointsBtn: document.querySelector('[data-action="sort-points"]'),
-  exportFavoritesBtn: document.querySelector('[data-action="export-favorites"]'),
-  continueReadingBtn: document.querySelector('[data-action="continue-reading"]')
+  exportFavoritesBtn: document.querySelector('[data-action="export-favorites"]')
 };
 
 function escapeHtml(value = "") {
@@ -57,6 +60,11 @@ function escapeHtml(value = "") {
     "\"": "&quot;",
     "'": "&#039;"
   })[char]);
+}
+
+function safeDomId(value = "") {
+  const normalized = String(value).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "item";
 }
 
 function linkifyText(value = "") {
@@ -99,11 +107,40 @@ function formatSnapshotTime(value) {
   return `更新 ${formatTime(value)}`;
 }
 
-function showToast(text) {
-  el.toast.textContent = text;
+function showToast(text, options = {}) {
+  const { actionLabel = "", actionIcon = "", duration = 1800, onAction } = options;
+  const message = document.createElement("span");
+  message.className = "toast-message";
+  message.textContent = text;
+  el.toast.replaceChildren(message);
+
+  if (actionLabel && typeof onAction === "function") {
+    const action = document.createElement("button");
+    action.className = "toast-action";
+    action.type = "button";
+    if (actionIcon) {
+      const icon = document.createElement("span");
+      icon.dataset.lucide = actionIcon;
+      icon.setAttribute("aria-hidden", "true");
+      action.appendChild(icon);
+    }
+    action.appendChild(document.createTextNode(actionLabel));
+    action.addEventListener("click", () => {
+      el.toast.classList.remove("show");
+      onAction();
+    }, { once: true });
+    el.toast.appendChild(action);
+    renderIcons(action);
+  }
+
   el.toast.classList.add("show");
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => el.toast.classList.remove("show"), 1800);
+  if (duration > 0) showToast._t = setTimeout(() => el.toast.classList.remove("show"), duration);
+}
+
+function setFeedBusy(busy, announcement = "") {
+  el.storyList?.setAttribute("aria-busy", String(Boolean(busy)));
+  if (announcement && el.feedStatus) el.feedStatus.textContent = announcement;
 }
 
 function renderIcons(root = document) {
@@ -207,13 +244,41 @@ function saveFavorites() {
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(Array.from(state.favorites.values())));
 }
 
-function loadReadingProgress() {
-  const rows = readJsonStorage(READING_PROGRESS_KEY, {});
-  state.readingProgress = new Map(Object.entries(rows).filter(([, value]) => value && typeof value === "object"));
+function saveReadStories() {
+  const rows = Array.from(state.readStories.entries())
+    .sort((a, b) => Date.parse(b[1] || "0") - Date.parse(a[1] || "0"))
+    .slice(0, READ_STORIES_LIMIT);
+  state.readStories = new Map(rows);
+  writeJsonStorage(READ_STORIES_KEY, Object.fromEntries(rows));
 }
 
-function saveReadingProgress() {
-  writeJsonStorage(READING_PROGRESS_KEY, Object.fromEntries(state.readingProgress.entries()));
+function loadReadStories() {
+  const stored = readJsonStorage(READ_STORIES_KEY, {});
+  const readStories = new Map(Object.entries(stored).filter(([storyId, readAt]) => (
+    storyId && typeof readAt === "string"
+  )));
+  const legacy = readJsonStorage(LEGACY_READING_PROGRESS_KEY, {});
+  let changed = false;
+
+  Object.values(legacy).forEach((record) => {
+    if (!record?.storyId || readStories.has(record.storyId)) return;
+    readStories.set(record.storyId, record.updatedAt || new Date().toISOString());
+    changed = true;
+  });
+
+  state.readStories = readStories;
+  if (Object.keys(legacy).length) {
+    localStorage.removeItem(LEGACY_READING_PROGRESS_KEY);
+    changed = true;
+  }
+  if (changed || state.readStories.size > READ_STORIES_LIMIT) saveReadStories();
+}
+
+function markStoryRead(storyId) {
+  if (!storyId || state.readStories.has(storyId)) return;
+  state.readStories.set(storyId, new Date().toISOString());
+  saveReadStories();
+  applyReadState();
 }
 
 function isFavorite(storyId) {
@@ -237,13 +302,22 @@ function setFavorite(storyId, shouldSave) {
 }
 
 function renderViewTabs() {
-  el.viewTabs.innerHTML = views.map((view) => {
-    const active = view.id === state.activeView ? " is-active" : "";
-    return `<button class="section-tab${active}" type="button" data-view="${escapeHtml(view.id)}">${escapeHtml(view.label)}</button>`;
-  }).join("");
+  if (!el.viewTabs.children.length) {
+    el.viewTabs.innerHTML = views.map((view) => `
+      <button class="section-tab" id="view-tab-${escapeHtml(view.id)}" type="button" role="tab" aria-controls="feed" data-view="${escapeHtml(view.id)}">${escapeHtml(view.label)}</button>
+    `).join("");
+  }
+  el.viewTabs.querySelectorAll("[data-view]").forEach((button) => {
+    const active = button.dataset.view === state.activeView;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+  el.storyList.setAttribute("aria-labelledby", `view-tab-${state.activeView}`);
 }
 
 function setSkeleton(count = 5) {
+  setFeedBusy(true);
   el.storyList.innerHTML = Array.from({ length: count }, () => `
     <div class="skeleton" aria-hidden="true">
       <div class="skeleton-rank"></div>
@@ -284,90 +358,18 @@ function storyUrl() {
   return `/api/stories?${params.toString()}`;
 }
 
-function currentProgressKey() {
-  const search = el.searchInput.value.trim();
-  if (search) return `search:${search}:sort:${state.pointsSort}`;
-  return `view:${state.activeView}:topic:${state.activeTopic}:sort:${state.pointsSort}`;
-}
-
-function currentProgress() {
-  return state.readingProgress.get(currentProgressKey()) || null;
-}
-
-function markStoryProgress(storyId) {
-  if (!storyId || state.activeView === "favorites") return;
-  const node = el.storyList.querySelector(`[data-story-id="${CSS.escape(storyId)}"]`);
-  if (!node) return;
-  const index = Number(node.dataset.storyIndex || 0);
-  state.readingProgress.set(currentProgressKey(), {
-    storyId,
-    index,
-    scrollY: Math.max(0, window.scrollY),
-    view: state.activeView,
-    updatedAt: new Date().toISOString()
-  });
-  saveReadingProgress();
-  applyReadingProgressState();
-}
-
-function visibleStoryNode() {
-  const nodes = Array.from(el.storyList.querySelectorAll(".story"));
-  if (!nodes.length) return null;
-  const anchorTop = Math.min(180, window.innerHeight * 0.32);
-  let candidate = nodes[0];
-  for (const node of nodes) {
-    const rect = node.getBoundingClientRect();
-    if (rect.bottom <= 72) continue;
-    if (rect.top <= anchorTop) {
-      candidate = node;
-      continue;
-    }
-    break;
-  }
-  return candidate;
-}
-
-function updateReadingProgressFromScroll() {
-  if (state.activeView === "favorites") return;
-  const node = visibleStoryNode();
-  if (!node) return;
-  markStoryProgress(node.dataset.storyId);
-}
-
-function continueReading() {
-  const record = currentProgress();
-  if (!record?.storyId) return;
-  const node = el.storyList.querySelector(`[data-story-id="${CSS.escape(record.storyId)}"]`);
-  if (node) {
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
-    node.classList.add("is-progress-pulse");
-    setTimeout(() => node.classList.remove("is-progress-pulse"), 1200);
-    return;
-  }
-  if (Number.isFinite(record.scrollY)) window.scrollTo({ top: record.scrollY, behavior: "smooth" });
-}
-
 function updateFeedActions() {
   if (el.exportFavoritesBtn) {
     el.exportFavoritesBtn.hidden = !(state.activeView === "favorites" && state.favorites.size > 0);
   }
-  if (el.continueReadingBtn) {
-    const record = currentProgress();
-    const node = record?.storyId ? el.storyList.querySelector(`[data-story-id="${CSS.escape(record.storyId)}"]`) : null;
-    const shouldShow = Boolean(state.activeView !== "favorites" && node && window.scrollY < node.offsetTop - 160);
-    el.continueReadingBtn.hidden = !shouldShow;
-  }
 }
 
-function applyReadingProgressState() {
-  const record = currentProgress();
-  const readIndex = Number.isFinite(record?.index) ? record.index : -1;
+function applyReadState() {
   el.storyList.querySelectorAll(".story").forEach((node) => {
-    const index = Number(node.dataset.storyIndex || 0);
-    const isRead = readIndex >= 0 && index <= readIndex;
-    const isAnchor = Boolean(record?.storyId && node.dataset.storyId === record.storyId);
+    const isRead = state.readStories.has(node.dataset.storyId);
     node.classList.toggle("is-read", isRead);
-    node.classList.toggle("is-progress-anchor", isAnchor);
+    const status = node.querySelector("[data-read-status]");
+    if (status) status.textContent = isRead ? "已读：" : "";
   });
   updateFeedActions();
 }
@@ -394,6 +396,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
       </div>
     `;
     el.feedCount.textContent = freshness.ready === false ? "同步中" : "";
+    setFeedBusy(false, freshness.ready === false ? "中文快照正在准备" : "没有匹配的条目");
     updateFeedActions();
     return;
   }
@@ -418,11 +421,12 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
     const favorite = isFavorite(story.id);
 
     return `
-      <article class="story${noZh}${animate ? "" : " story-instant"}" data-story-id="${escapeHtml(story.id)}" data-story-index="${i}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
+      <article class="story${noZh}${animate ? "" : " story-instant"}" data-story-id="${escapeHtml(story.id)}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
         <div class="story-rank">${rank}</div>
         <div class="story-main">
           <div class="story-topline">
             <div class="story-title-block">
+              <span class="sr-only" data-read-status></span>
               ${hasZh ? `
                 <div class="title-zh"><a href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(titleZh)}</a></div>
                 <div class="title-en">${escapeHtml(story.title)}</div>
@@ -435,30 +439,35 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
             </button>
           </div>
           ${summary ? `<p class="summary">${escapeHtml(summary)}</p>` : ""}
-          <div class="meta">
-            <span class="points">${story.points ?? 0}</span>
-            ${commentsCount > 0 ? `
-              <button class="meta-text comment-count-btn" type="button" data-toggle-comments data-preferred-tab="comments" data-comment-id="${escapeHtml(commentId)}" data-comments-count="${commentsCount}">${commentsCount} 评论</button>
-            ` : `<span class="meta-text">0 评论</span>`}
-            <span class="meta-dot">·</span>
-            <a class="meta-text domain domain-link" href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(story.domain)}</a>
-            <span class="meta-dot">·</span>
-            <span class="meta-text">${escapeHtml(formatTime(story.publishedAt))}</span>
-            <span class="meta-dot">·</span>
-            ${commentsCount > 0 ? `
-              ${canReadSummary ? `
-                <button class="meta-text discuss-btn" type="button" data-toggle-comments data-preferred-tab="summary" data-comment-id="${escapeHtml(commentId)}">讨论速读</button>
-              ` : `<span class="meta-text discuss-status">生成速读中</span>`}
+          <div class="story-meta">
+            <div class="meta meta-facts">
+              <span class="points" aria-label="${story.points ?? 0} 热度">${story.points ?? 0}</span>
+              ${commentsCount > 0 ? `
+                <button class="meta-text meta-interactive comment-count-btn" type="button" data-toggle-comments data-preferred-tab="comments" data-comment-id="${escapeHtml(commentId)}" data-comments-count="${commentsCount}">${commentsCount} 评论</button>
+              ` : `<span class="meta-text">0 评论</span>`}
               <span class="meta-dot">·</span>
-              <button class="meta-text discuss-btn" type="button" data-toggle-comments data-preferred-tab="best" data-comment-id="${escapeHtml(commentId)}" ${canReadBest ? "" : "disabled"}>${canReadBest ? "最佳评论" : "暂无最佳评论"}</button>
-            ` : `<span class="meta-text discuss-status">暂无讨论</span>`}
+              <a class="meta-text meta-interactive domain domain-link" href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(story.domain)}</a>
+              <span class="meta-dot">·</span>
+              <span class="meta-text">${escapeHtml(formatTime(story.publishedAt))}</span>
+            </div>
+            <div class="meta meta-actions">
+              ${commentsCount > 0 ? `
+                ${canReadSummary ? `
+                  <button class="meta-text meta-interactive discuss-btn" type="button" data-toggle-comments data-preferred-tab="summary" data-comment-id="${escapeHtml(commentId)}">讨论速读</button>
+                ` : `<span class="meta-text discuss-status">生成速读中</span>`}
+                ${canReadBest ? `
+                  <button class="meta-text meta-interactive discuss-btn" type="button" data-toggle-comments data-preferred-tab="best" data-comment-id="${escapeHtml(commentId)}">最佳评论</button>
+                ` : `<span class="meta-text discuss-status">暂无最佳评论</span>`}
+              ` : `<span class="meta-text discuss-status">暂无讨论</span>`}
+            </div>
           </div>
           <div class="comments-container" data-comments-for="${escapeHtml(commentId)}" hidden></div>
         </div>
       </article>
     `;
   }).join("");
-  applyReadingProgressState();
+  applyReadState();
+  setFeedBusy(false, `${el.feedTitle.textContent || "当前栏目"}，共 ${stories.length} 篇`);
   renderIcons(el.storyList);
 }
 
@@ -505,6 +514,7 @@ async function loadStories({ silent = false } = {}) {
       </div>
     `;
     el.feedCount.textContent = "";
+    setFeedBusy(false, "新闻列表加载失败");
     updateFeedActions();
   }
 }
@@ -615,6 +625,7 @@ async function renderInsightView(viewId) {
           <p>恢复网络后会继续读取最新快照。</p>
         </div>
       `;
+      setFeedBusy(false, `${label}加载失败`);
       updateFeedActions();
       return;
     }
@@ -629,6 +640,7 @@ async function renderInsightView(viewId) {
         <p>后台快照更新后会自动补上。</p>
       </div>
     `;
+    setFeedBusy(false, `${label}暂时没有内容`);
     updateFeedActions();
     return;
   }
@@ -650,6 +662,7 @@ function renderFavoritesView() {
         <p>看到值得回看的帖子，点右上角星标即可保存到本机。</p>
       </div>
     `;
+    setFeedBusy(false, "收藏列表为空");
     updateFeedActions();
     return;
   }
@@ -823,12 +836,14 @@ function renderCommentItem(c, translations, marker = "") {
 }
 
 function setActiveDiscussionTab(container, tab) {
+  if (!container) return;
   const target = container.querySelector(`[data-discussion-tab="${CSS.escape(tab)}"]`);
   if (!target || target.disabled) return;
   container.querySelectorAll("[data-discussion-tab]").forEach((btn) => {
     const active = btn.dataset.discussionTab === tab;
     btn.classList.toggle("is-active", active);
     btn.setAttribute("aria-selected", String(active));
+    btn.tabIndex = active ? 0 : -1;
   });
   container.querySelectorAll("[data-tab-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.tabPanel !== tab;
@@ -853,19 +868,20 @@ function renderComments(container, comments, translations, article, status, best
   const bestHtml = hasBest
     ? bestComments.map((comment, index) => renderCommentItem(comment, translations, `最佳 ${index + 1}`)).join("")
     : `<div class="comments-empty"><p>暂无最佳评论</p></div>`;
+  const groupId = `discussion-${safeDomId(container.dataset.commentsFor)}`;
 
   container.innerHTML = `
-    <div class="discussion-tabs" role="tablist">
-      <button type="button" data-discussion-tab="summary" role="tab" ${summaryReady ? "" : "disabled"}>讨论速读</button>
-      <button type="button" data-discussion-tab="comments" role="tab">全部评论</button>
-      <button type="button" data-discussion-tab="best" role="tab" ${hasBest ? "" : "disabled"}>${hasBest ? "最佳评论" : "暂无最佳评论"}</button>
+    <div class="discussion-tabs" role="tablist" aria-label="讨论内容">
+      <button id="${groupId}-tab-summary" type="button" data-discussion-tab="summary" role="tab" aria-controls="${groupId}-panel-summary" aria-selected="false" tabindex="-1" ${summaryReady ? "" : "disabled"}>讨论速读</button>
+      <button id="${groupId}-tab-comments" type="button" data-discussion-tab="comments" role="tab" aria-controls="${groupId}-panel-comments" aria-selected="false" tabindex="-1">全部评论</button>
+      <button id="${groupId}-tab-best" type="button" data-discussion-tab="best" role="tab" aria-controls="${groupId}-panel-best" aria-selected="false" tabindex="-1" ${hasBest ? "" : "disabled"}>${hasBest ? "最佳评论" : "暂无最佳评论"}</button>
     </div>
-    <div class="discussion-panel" data-tab-panel="summary">${renderDiscussionArticle(article, bestComments, translations)}</div>
-    <div class="discussion-panel" data-tab-panel="comments">
+    <div id="${groupId}-panel-summary" class="discussion-panel" data-tab-panel="summary" role="tabpanel" aria-labelledby="${groupId}-tab-summary" tabindex="0">${renderDiscussionArticle(article, bestComments, translations)}</div>
+    <div id="${groupId}-panel-comments" class="discussion-panel" data-tab-panel="comments" role="tabpanel" aria-labelledby="${groupId}-tab-comments" tabindex="0">
       <div class="comments-list">${commentsHtml}</div>
       ${hasBest ? `<button class="comments-bottom-switch" type="button" data-switch-tab="best"><span data-lucide="star" aria-hidden="true"></span>看最佳评论</button>` : ""}
     </div>
-    <div class="discussion-panel" data-tab-panel="best">
+    <div id="${groupId}-panel-best" class="discussion-panel" data-tab-panel="best" role="tabpanel" aria-labelledby="${groupId}-tab-best" tabindex="0">
       <div class="comments-list best-comments-list">${bestHtml}</div>
     </div>
   `;
@@ -954,11 +970,29 @@ function debounce(fn, delay = 300) {
   };
 }
 
-const persistReadingProgress = debounce(updateReadingProgressFromScroll, 450);
+function showServiceWorkerUpdate() {
+  if (state.serviceWorkerUpdateShown) return;
+  state.serviceWorkerUpdateShown = true;
+  showToast("新版本已就绪", {
+    actionLabel: "刷新",
+    actionIcon: "refresh-cw",
+    duration: 12000,
+    onAction: () => window.location.reload()
+  });
+}
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadController) showServiceWorkerUpdate();
+  }, { once: true });
+  await navigator.serviceWorker.register("/service-worker.js");
+}
 
 async function init() {
   loadFavorites();
-  loadReadingProgress();
+  loadReadStories();
   readInitialUrlState();
   state.initialData = readInitialData();
   renderViewTabs();
@@ -973,15 +1007,27 @@ async function init() {
     await loadCurrentView();
   }
 
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/service-worker.js").catch(() => {});
-  }
+  registerServiceWorker().catch(() => {});
 }
 
 el.viewTabs.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-view]");
   if (!btn) return;
   setActiveView(btn.dataset.view).catch(() => showToast("这一栏暂时没读到"));
+});
+
+el.viewTabs.addEventListener("keydown", (event) => {
+  const current = event.target.closest("[role=tab]");
+  if (!current || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = Array.from(el.viewTabs.querySelectorAll("[role=tab]"));
+  const currentIndex = tabs.indexOf(current);
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+  if (event.key === "Home") nextIndex = 0;
+  if (event.key === "End") nextIndex = tabs.length - 1;
+  event.preventDefault();
+  tabs[nextIndex]?.focus();
 });
 
 document.addEventListener("click", (event) => {
@@ -1020,8 +1066,6 @@ document.addEventListener("click", (event) => {
     loadCurrentView();
   } else if (action === "export-favorites") {
     exportFavorites();
-  } else if (action === "continue-reading") {
-    continueReading();
   }
 });
 
@@ -1041,7 +1085,7 @@ el.storyList.addEventListener("click", (event) => {
 
   const storyNode = event.target.closest(".story");
   if (storyNode && event.target.closest("a, [data-toggle-comments]")) {
-    markStoryProgress(storyNode.dataset.storyId);
+    markStoryRead(storyNode.dataset.storyId);
   }
 
   const tab = event.target.closest("[data-discussion-tab]");
@@ -1063,6 +1107,24 @@ el.storyList.addEventListener("click", (event) => {
   if (container) toggleComments(commentId, container, btn, btn.dataset.preferredTab || "summary");
 });
 
+el.storyList.addEventListener("keydown", (event) => {
+  const current = event.target.closest("[data-discussion-tab]");
+  if (!current || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const container = current.closest(".comments-container");
+  const tabs = Array.from(container.querySelectorAll("[data-discussion-tab]:not(:disabled)"));
+  const currentIndex = tabs.indexOf(current);
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+  if (event.key === "Home") nextIndex = 0;
+  if (event.key === "End") nextIndex = tabs.length - 1;
+  const target = tabs[nextIndex];
+  if (!target) return;
+  event.preventDefault();
+  setActiveDiscussionTab(container, target.dataset.discussionTab);
+  target.focus();
+});
+
 const reloadFromFilters = debounce(() => {
   if (state.activeView !== "home") {
     state.activeView = "home";
@@ -1082,7 +1144,6 @@ window.addEventListener("appinstalled", () => {
   updateInstallButton();
 });
 window.matchMedia("(display-mode: standalone)").addEventListener?.("change", updateInstallButton);
-window.addEventListener("scroll", persistReadingProgress, { passive: true });
 window.addEventListener("popstate", () => {
   state.expandedComments.clear();
   readInitialUrlState();
@@ -1104,4 +1165,5 @@ init().catch(() => {
       <p>请刷新页面重试。</p>
     </div>
   `;
+  setFeedBusy(false, "页面初始化失败");
 });

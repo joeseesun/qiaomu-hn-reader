@@ -30,9 +30,9 @@
 | 精选评论观点 | 在速读下方引用高价值评论的核心观点，辅助判断是否继续读 |
 | 最佳评论 | 从缓存评论里按观点密度、经验/取舍信号和可读性选出最多 4 条 |
 | 首屏快照 | 首页 HTML 内嵌最近快照，前端先同步渲染，再后台静默刷新 |
-| 收藏与进度 | 纯本地收藏、Markdown 导出和按视图保存阅读进度，不需要登录 |
+| 收藏与已读 | 纯本地收藏、Markdown 导出和按帖子记录真实已读状态，不需要登录 |
 | 风险/噪声过滤 | 默认过滤政治、军事、高争议社会议题和招聘广告，降低公开站运营风险 |
-| PWA 安装 | manifest、maskable 图标、Apple touch icon、离线兜底页、最近快照和 service worker 缓存 |
+| PWA 安装 | manifest、maskable 图标、Apple touch icon、离线兜底页、最近快照、service worker 缓存和新版本刷新提示 |
 | SEO 基础 | canonical、Open Graph、JSON-LD、robots.txt、sitemap.xml 和分享图 |
 
 ## 产品截图
