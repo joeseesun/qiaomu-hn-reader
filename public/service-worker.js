@@ -1,16 +1,18 @@
-const CACHE = "hn-qiaomu-v0.6.2";
+const CACHE = "hn-qiaomu-v0.7.0";
 const ASSETS = [
   "/",
   "/offline.html",
-  "/styles.css?v=0.6.2",
-  "/lucide-icons.js?v=0.6.2",
-  "/app.js?v=0.6.2",
+  "/styles.css?v=0.7.0",
+  "/lucide-icons.js?v=0.7.0",
+  "/app.js?v=0.7.0",
   "/favicon.svg",
   "/manifest.webmanifest",
   "/icons/apple-touch-icon.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/icons/maskable-512.png"
+  "/icons/maskable-512.png",
+  "/assets/qiaomu_wechat_public_account_qr.jpg",
+  "/assets/qiaomu_reward_qr.png"
 ];
 
 function shouldCacheApi(url) {

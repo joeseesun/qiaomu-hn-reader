@@ -47,6 +47,8 @@ await checkText("/sitemap.xml", (text) => text.includes("<urlset") && text.inclu
 await checkAsset("/icons/icon-192.png");
 await checkAsset("/icons/icon-512.png");
 await checkAsset("/icons/maskable-512.png");
+await checkAsset("/assets/qiaomu_wechat_public_account_qr.jpg");
+await checkAsset("/assets/qiaomu_reward_qr.png");
 await waitForSnapshot();
 await check("/api/status", (data) => data.ok === true && data.snapshot?.ready === true);
 await check(

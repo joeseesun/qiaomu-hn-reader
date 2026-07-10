@@ -34,6 +34,7 @@
 | 风险/噪声过滤 | 默认过滤政治、军事、高争议社会议题和招聘广告，降低公开站运营风险 |
 | PWA 安装 | manifest、maskable 图标、Apple touch icon、离线兜底页、最近快照、service worker 缓存和新版本刷新提示 |
 | SEO 基础 | canonical、Open Graph、JSON-LD、robots.txt、sitemap.xml 和分享图 |
+| 支持与开源 | 页脚提供公众号关注、打赏二维码和项目 GitHub 开源地址 |
 
 ## 产品截图
 
