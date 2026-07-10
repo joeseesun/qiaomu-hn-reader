@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { topics } from "../topics.js";
 import { generateDiscussionArticle } from "./discussion.js";
-import { getComments, getStories, type Story } from "./hnrss.js";
+import { getComments, getStories, type Comment, type Story } from "./hnrss.js";
 import { assessStoryRisk } from "./risk.js";
 import {
   createRefreshDraft,
@@ -14,10 +14,50 @@ import { preloadStoryTranslationCache, translateComments, translateStories } fro
 
 const TOPIC_DELAY_MS = 3000;
 const COMMENT_DELAY_MS = 3000;
+const COMMENT_FETCH_RETRIES = 1;
+const COMMENT_RETRY_DELAY_MS = 1200;
 const PREFETCH_TOPIC_IDS = new Set(["frontpage", "active", "show", "launches"]);
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function messageForError(error: unknown, fallback = "Unknown") {
+  return error instanceof Error ? error.message : fallback;
+}
+
+async function getCommentsWithRetry(storyId: string) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= COMMENT_FETCH_RETRIES; attempt++) {
+    try {
+      return await getComments(storyId);
+    } catch (error) {
+      lastError = error;
+      if (attempt < COMMENT_FETCH_RETRIES) await sleep(COMMENT_RETRY_DELAY_MS);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Unknown comments fetch error");
+}
+
+function preservePreviousComments(draft: FeedSnapshot, base: FeedSnapshot, storyId: string, message: string) {
+  const previous = draft.comments[storyId] || base.comments[storyId];
+  if (previous?.comments.length) {
+    draft.comments[storyId] = {
+      ...previous,
+      status: "partial",
+      error: message
+    };
+    return previous.comments.length;
+  }
+
+  draft.comments[storyId] = {
+    status: "error",
+    updatedAt: new Date().toISOString(),
+    comments: [],
+    translations: {},
+    error: message
+  };
+  return 0;
 }
 
 function scoreStory(story: Story) {
@@ -150,30 +190,55 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
     const candidates = pickCommentCandidates(draft);
     for (let i = 0; i < candidates.length; i++) {
       const story = candidates[i];
+      const commentTargetId = story.hnId || story.id;
+      let comments: Comment[];
       try {
-        const comments = (await getComments(story.hnId || story.id)).slice(0, config.commentsPerStory);
-        const translations = await translateComments(comments, story.id);
-        draft.comments[story.id] = {
-          status: comments.length ? "ready" : "empty",
-          updatedAt: new Date().toISOString(),
-          comments,
-          translations
-        };
-        draft.articles[story.id] = await generateDiscussionArticle(story, draft.translations[story.id], comments, translations);
-        console.log(`[prefetch] comments story=${story.id} comments=${comments.length} article=${draft.articles[story.id]?.status}`);
+        comments = (await getCommentsWithRetry(commentTargetId)).slice(0, config.commentsPerStory);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown";
-        draft.comments[story.id] = {
-          status: "error",
-          updatedAt: new Date().toISOString(),
-          comments: [],
-          translations: {},
-          error: message
-        };
+        const message = messageForError(error);
+        const preservedCount = preservePreviousComments(draft, base, story.id, message);
         draft.errors.push(`comments:${story.id}: ${message}`);
-        console.warn(`[prefetch] comments story=${story.id} error: ${message}`);
+        console.warn(`[prefetch] comments story=${story.id} error: ${message}${preservedCount ? ` preserved=${preservedCount}` : ""}`);
+        await saveFeedSnapshot(draft);
+        if (i < candidates.length - 1) await sleep(COMMENT_DELAY_MS);
+        continue;
       }
 
+      let translations = draft.comments[story.id]?.translations || {};
+      let status: "ready" | "empty" | "partial" = comments.length ? "ready" : "empty";
+      let commentError: string | undefined;
+
+      if (comments.length) {
+        try {
+          translations = await translateComments(comments, story.id);
+        } catch (error) {
+          const message = messageForError(error, "Unknown comments translation error");
+          status = "partial";
+          commentError = `评论翻译失败: ${message}`;
+          draft.errors.push(`commentTranslations:${story.id}: ${message}`);
+          console.warn(`[prefetch] comment translations story=${story.id} error: ${message}`);
+        }
+      }
+
+      draft.comments[story.id] = {
+        status,
+        updatedAt: new Date().toISOString(),
+        comments,
+        translations,
+        ...(commentError ? { error: commentError } : {})
+      };
+
+      try {
+        draft.articles[story.id] = await generateDiscussionArticle(story, draft.translations[story.id], comments, translations);
+      } catch (error) {
+        const message = messageForError(error, "Unknown discussion article error");
+        const previousArticle = draft.articles[story.id] || base.articles[story.id];
+        if (previousArticle) draft.articles[story.id] = previousArticle;
+        draft.errors.push(`discussion:${story.id}: ${message}`);
+        console.warn(`[prefetch] discussion story=${story.id} error: ${message}`);
+      }
+
+      console.log(`[prefetch] comments story=${story.id} comments=${comments.length} article=${draft.articles[story.id]?.status || "none"}`);
       await saveFeedSnapshot(draft);
       if (i < candidates.length - 1) await sleep(COMMENT_DELAY_MS);
     }
