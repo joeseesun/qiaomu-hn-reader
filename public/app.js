@@ -421,7 +421,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
     const favorite = isFavorite(story.id);
 
     return `
-      <article class="story${noZh}${animate ? "" : " story-instant"}" data-story-id="${escapeHtml(story.id)}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
+      <article class="story${noZh}${animate ? "" : " story-instant"}" data-story-id="${escapeHtml(story.id)}" data-story-url="${escapeHtml(story.url)}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
         <div class="story-rank">${rank}</div>
         <div class="story-main">
           <div class="story-topline">
@@ -448,17 +448,17 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
               <span class="meta-dot">·</span>
               <a class="meta-text meta-interactive domain domain-link" href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(story.domain)}</a>
               <span class="meta-dot">·</span>
-              <span class="meta-text">${escapeHtml(formatTime(story.publishedAt))}</span>
-            </div>
-            <div class="meta meta-actions">
               ${commentsCount > 0 ? `
                 ${canReadSummary ? `
                   <button class="meta-text meta-interactive discuss-btn" type="button" data-toggle-comments data-preferred-tab="summary" data-comment-id="${escapeHtml(commentId)}">讨论速读</button>
                 ` : `<span class="meta-text discuss-status">生成速读中</span>`}
+                <span class="meta-dot">·</span>
                 ${canReadBest ? `
                   <button class="meta-text meta-interactive discuss-btn" type="button" data-toggle-comments data-preferred-tab="best" data-comment-id="${escapeHtml(commentId)}">最佳评论</button>
                 ` : `<span class="meta-text discuss-status">暂无最佳评论</span>`}
               ` : `<span class="meta-text discuss-status">暂无讨论</span>`}
+              <span class="meta-dot">·</span>
+              <span class="meta-text">${escapeHtml(formatTime(story.publishedAt))}</span>
             </div>
           </div>
           <div class="comments-container" data-comments-for="${escapeHtml(commentId)}" hidden></div>
@@ -1101,10 +1101,20 @@ el.storyList.addEventListener("click", (event) => {
   }
 
   const btn = event.target.closest("[data-toggle-comments]");
-  if (!btn || btn.disabled) return;
-  const commentId = btn.dataset.commentId;
-  const container = el.storyList.querySelector(`[data-comments-for="${CSS.escape(commentId)}"]`);
-  if (container) toggleComments(commentId, container, btn, btn.dataset.preferredTab || "summary");
+  if (btn && !btn.disabled) {
+    const commentId = btn.dataset.commentId;
+    const container = el.storyList.querySelector(`[data-comments-for="${CSS.escape(commentId)}"]`);
+    if (container) toggleComments(commentId, container, btn, btn.dataset.preferredTab || "summary");
+    return;
+  }
+
+  if (!storyNode || event.button !== 0 || event.defaultPrevented) return;
+  if (event.target.closest("a, button, input, select, textarea, details, summary, [role=button], [role=tab], .comments-container")) return;
+  if (!window.getSelection()?.isCollapsed) return;
+  const url = storyNode.dataset.storyUrl;
+  if (!url) return;
+  markStoryRead(storyNode.dataset.storyId);
+  window.open(url, "_blank", "noopener,noreferrer");
 });
 
 el.storyList.addEventListener("keydown", (event) => {
