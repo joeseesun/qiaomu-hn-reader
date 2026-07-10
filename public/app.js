@@ -5,6 +5,23 @@ const LEGACY_READING_PROGRESS_KEY = "qiaomu-hn-reading-progress-v1";
 const RECENT_CACHE_LIMIT = 8;
 const READ_STORIES_LIMIT = 1000;
 
+const supportDialogs = {
+  follow: {
+    kicker: "微信公众号",
+    title: "关注向阳乔木",
+    image: "/assets/qiaomu_wechat_public_account_qr.jpg",
+    imageAlt: "向阳乔木推荐看微信公众号二维码",
+    description: "微信扫码关注「向阳乔木推荐看」。"
+  },
+  reward: {
+    kicker: "支持创作",
+    title: "打赏支持",
+    image: "/assets/qiaomu_reward_qr.png",
+    imageAlt: "向阳乔木打赏二维码",
+    description: "感谢你支持这个项目继续更新。"
+  }
+};
+
 const views = [
   { id: "home", label: "首页精选" },
   { id: "rising", label: "升温榜" },
@@ -32,7 +49,8 @@ const state = {
   storyCache: new Map(),
   translationCache: {},
   initialData: null,
-  serviceWorkerUpdateShown: false
+  serviceWorkerUpdateShown: false,
+  supportDialogTrigger: null
 };
 
 const validViews = new Set(views.map((view) => view.id));
@@ -49,7 +67,12 @@ const el = {
   refreshBtn: document.querySelector('[data-action="refresh"]'),
   installAppBtn: document.querySelector('[data-action="install-app"]'),
   sortPointsBtn: document.querySelector('[data-action="sort-points"]'),
-  exportFavoritesBtn: document.querySelector('[data-action="export-favorites"]')
+  exportFavoritesBtn: document.querySelector('[data-action="export-favorites"]'),
+  supportDialog: document.querySelector("[data-support-dialog]"),
+  supportKicker: document.querySelector("[data-support-kicker]"),
+  supportTitle: document.querySelector("[data-support-title]"),
+  supportImage: document.querySelector("[data-support-image]"),
+  supportDescription: document.querySelector("[data-support-description]")
 };
 
 function escapeHtml(value = "") {
@@ -145,6 +168,31 @@ function setFeedBusy(busy, announcement = "") {
 
 function renderIcons(root = document) {
   window.qmLucide?.render(root);
+}
+
+function openSupportDialog(kind, trigger) {
+  const content = supportDialogs[kind];
+  if (!content || !el.supportDialog) return;
+  state.supportDialogTrigger = trigger || null;
+  el.supportKicker.textContent = content.kicker;
+  el.supportTitle.textContent = content.title;
+  el.supportImage.src = content.image;
+  el.supportImage.alt = content.imageAlt;
+  el.supportDescription.textContent = content.description;
+  if (typeof el.supportDialog.showModal === "function") {
+    el.supportDialog.showModal();
+  } else {
+    el.supportDialog.setAttribute("open", "");
+  }
+}
+
+function closeSupportDialog() {
+  if (!el.supportDialog) return;
+  if (typeof el.supportDialog.close === "function" && el.supportDialog.open) {
+    el.supportDialog.close();
+  } else {
+    el.supportDialog.removeAttribute("open");
+  }
 }
 
 function isPwaStandalone() {
@@ -1031,7 +1079,8 @@ el.viewTabs.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  const action = event.target.closest("[data-action]")?.dataset.action;
+  const actionTarget = event.target.closest("[data-action]");
+  const action = actionTarget?.dataset.action;
   if (action === "refresh") {
     if (state.refreshing) return;
     state.refreshing = true;
@@ -1066,7 +1115,21 @@ document.addEventListener("click", (event) => {
     loadCurrentView();
   } else if (action === "export-favorites") {
     exportFavorites();
+  } else if (action === "open-support") {
+    openSupportDialog(actionTarget.dataset.support, actionTarget);
+  } else if (action === "close-support") {
+    closeSupportDialog();
   }
+});
+
+el.supportDialog?.addEventListener("click", (event) => {
+  if (event.target === el.supportDialog) closeSupportDialog();
+});
+
+el.supportDialog?.addEventListener("close", () => {
+  const trigger = state.supportDialogTrigger;
+  state.supportDialogTrigger = null;
+  requestAnimationFrame(() => trigger?.focus());
 });
 
 el.storyList.addEventListener("click", (event) => {

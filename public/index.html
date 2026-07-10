@@ -118,11 +118,36 @@
 
       <!-- 页脚(低干扰署名) -->
       <footer class="footer">
-        <span>Powered by <a href="https://qiaomu.ai/" target="_blank" rel="noopener noreferrer">向阳乔木</a></span>
-        <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">Hacker News</a>
-        <a href="https://hnrss.org/" target="_blank" rel="noopener noreferrer">HNRSS</a>
+        <div class="footer-links">
+          <span>Powered by <a href="https://qiaomu.ai/" target="_blank" rel="noopener noreferrer">向阳乔木</a></span>
+          <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">Hacker News</a>
+          <a href="https://hnrss.org/" target="_blank" rel="noopener noreferrer">HNRSS</a>
+        </div>
+        <nav class="footer-actions" aria-label="支持与开源">
+          <button class="footer-icon-btn" type="button" data-action="open-support" data-support="follow" data-tooltip="关注公众号" aria-label="关注乔木公众号">
+            <span data-lucide="message-circle" aria-hidden="true"></span>
+          </button>
+          <button class="footer-icon-btn" type="button" data-action="open-support" data-support="reward" data-tooltip="打赏支持" aria-label="打赏支持">
+            <span data-lucide="heart" aria-hidden="true"></span>
+          </button>
+          <a class="footer-icon-btn" href="https://github.com/joeseesun/qiaomu-hn-reader" target="_blank" rel="noopener noreferrer" data-tooltip="GitHub 开源" aria-label="在 GitHub 查看乔木 HN 速读开源项目">
+            <span data-lucide="github" aria-hidden="true"></span>
+          </a>
+        </nav>
       </footer>
     </div>
+
+    <dialog class="support-dialog" data-support-dialog aria-labelledby="support-dialog-title">
+      <div class="support-dialog-panel">
+        <button class="support-dialog-close" type="button" data-action="close-support" aria-label="关闭">
+          <span data-lucide="x" aria-hidden="true"></span>
+        </button>
+        <div class="support-dialog-kicker" data-support-kicker></div>
+        <h2 id="support-dialog-title" data-support-title></h2>
+        <img class="support-dialog-qr" data-support-image width="280" height="280" alt="" />
+        <p data-support-description></p>
+      </div>
+    </dialog>
 
     <div class="toast" data-toast role="status" aria-live="polite"></div>
   </body>
