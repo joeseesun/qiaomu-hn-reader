@@ -2,6 +2,7 @@ import path from "node:path";
 
 export const config = {
   port: Number(process.env.PORT || 3000),
+  host: process.env.HOST || "127.0.0.1",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:3000",
   hnrssBaseUrl: process.env.HNRSS_BASE_URL || "https://hnrss.org",
   hnApiBaseUrl: (process.env.HN_API_BASE_URL || "https://hacker-news.firebaseio.com/v0").replace(/\/+$/, ""),

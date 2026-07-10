@@ -16,7 +16,7 @@ import { topics } from "./topics.js";
 
 const app = express();
 const publicDir = path.resolve("public");
-const appVersion = "0.6.0";
+const appVersion = "0.6.1";
 
 app.disable("x-powered-by");
 app.use(compression());
@@ -382,7 +382,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   res.status(500).json({ error: "internal_error", message });
 });
 
-app.listen(config.port, "0.0.0.0", () => {
-  console.log(`hn-qiaomu listening on :${config.port}`);
+app.listen(config.port, config.host, () => {
+  console.log(`hn-qiaomu listening on ${config.host}:${config.port}`);
   startPrefetchLoop();
 });
