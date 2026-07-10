@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 import { topics } from "../topics.js";
 import { generateDiscussionArticle } from "./discussion.js";
-import { getComments, getStories, type Comment, type Story } from "./hnrss.js";
+import { getComments, getCommentsFromHnApi, getStories, type Comment, type Story } from "./hnrss.js";
 import { assessStoryRisk } from "./risk.js";
 import {
   createRefreshDraft,
@@ -26,17 +26,31 @@ function messageForError(error: unknown, fallback = "Unknown") {
   return error instanceof Error ? error.message : fallback;
 }
 
-async function getCommentsWithRetry(storyId: string) {
+async function getCommentsWithRetry(storyId: string, expectedCount: number) {
   let lastError: unknown;
   for (let attempt = 0; attempt <= COMMENT_FETCH_RETRIES; attempt++) {
     try {
-      return await getComments(storyId);
+      const comments = await getComments(storyId);
+      if (comments.length || expectedCount <= 0) return { comments, source: "hnrss" as const };
+      lastError = new Error("HNRSS returned no comments");
     } catch (error) {
       lastError = error;
-      if (attempt < COMMENT_FETCH_RETRIES) await sleep(COMMENT_RETRY_DELAY_MS);
     }
+    if (attempt < COMMENT_FETCH_RETRIES) await sleep(COMMENT_RETRY_DELAY_MS);
   }
-  throw lastError instanceof Error ? lastError : new Error("Unknown comments fetch error");
+
+  try {
+    const comments = await getCommentsFromHnApi(storyId, config.commentsPerStory);
+    return {
+      comments,
+      source: "hn-api" as const,
+      fallbackReason: messageForError(lastError, "HNRSS comments unavailable")
+    };
+  } catch (fallbackError) {
+    throw new Error(
+      `${messageForError(lastError, "HNRSS comments unavailable")}; HN API fallback: ${messageForError(fallbackError)}`
+    );
+  }
 }
 
 function preservePreviousComments(draft: FeedSnapshot, base: FeedSnapshot, storyId: string, message: string) {
@@ -192,8 +206,14 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
       const story = candidates[i];
       const commentTargetId = story.hnId || story.id;
       let comments: Comment[];
+      let commentSource: "hnrss" | "hn-api" = "hnrss";
       try {
-        comments = (await getCommentsWithRetry(commentTargetId)).slice(0, config.commentsPerStory);
+        const fetched = await getCommentsWithRetry(commentTargetId, story.comments || 0);
+        comments = fetched.comments.slice(0, config.commentsPerStory);
+        commentSource = fetched.source;
+        if (fetched.source === "hn-api") {
+          console.warn(`[prefetch] comments story=${story.id} fallback=hn-api reason=${fetched.fallbackReason}`);
+        }
       } catch (error) {
         const message = messageForError(error);
         const preservedCount = preservePreviousComments(draft, base, story.id, message);
@@ -238,7 +258,7 @@ export async function refreshFeedSnapshot(reason = "scheduled") {
         console.warn(`[prefetch] discussion story=${story.id} error: ${message}`);
       }
 
-      console.log(`[prefetch] comments story=${story.id} comments=${comments.length} article=${draft.articles[story.id]?.status || "none"}`);
+      console.log(`[prefetch] comments story=${story.id} comments=${comments.length} source=${commentSource} article=${draft.articles[story.id]?.status || "none"}`);
       await saveFeedSnapshot(draft);
       if (i < candidates.length - 1) await sleep(COMMENT_DELAY_MS);
     }

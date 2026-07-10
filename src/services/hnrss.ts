@@ -17,6 +17,17 @@ type JsonFeed = {
   items?: JsonFeedItem[];
 };
 
+type HnApiItem = {
+  id?: number;
+  by?: string;
+  time?: number;
+  text?: string;
+  type?: string;
+  kids?: number[];
+  deleted?: boolean;
+  dead?: boolean;
+};
+
 export type Story = {
   id: string;
   hnId: string | null;
@@ -263,6 +274,81 @@ function normalizeComment(item: JsonFeedItem): Comment | null {
     url,
     publishedAt: item.date_published || null
   };
+}
+
+async function fetchHnApiItem(id: string | number): Promise<HnApiItem | null> {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), config.hnApiTimeoutMs);
+  try {
+    const response = await fetch(`${config.hnApiBaseUrl}/item/${id}.json`, {
+      signal: abort.signal,
+      headers: {
+        accept: "application/json",
+        "user-agent": "hn.qiaomu.ai/0.5 (+https://hn.qiaomu.ai)"
+      }
+    });
+    if (!response.ok) throw new Error(`HN API item ${response.status}`);
+    return (await response.json()) as HnApiItem | null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeHnApiComment(item: HnApiItem | null): Comment | null {
+  if (!item?.id || item.type !== "comment" || item.deleted || item.dead) return null;
+  const textHtml = item.text || "";
+  const textPlain = stripHtml(textHtml);
+  if (!textPlain) return null;
+  const url = `https://news.ycombinator.com/item?id=${item.id}`;
+  return {
+    id: url,
+    author: item.by || "unknown",
+    textHtml,
+    textPlain,
+    url,
+    publishedAt: item.time ? new Date(item.time * 1000).toISOString() : null
+  };
+}
+
+export async function getCommentsFromHnApi(storyId: string, requestedLimit = 30): Promise<Comment[]> {
+  const cacheKey = `comments:${storyId}`;
+  const cached = feedCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() && "comments" in cached && cached.comments.length) return cached.comments;
+
+  const hnId = extractHnId(storyId) || (/^\d+$/.test(storyId) ? storyId : null);
+  if (!hnId) throw new Error("HN API fallback requires a numeric story id");
+
+  const limit = clampLimit(requestedLimit);
+  const story = await fetchHnApiItem(hnId);
+  if (!story) throw new Error("HN API story not found");
+
+  const queue = [...(story.kids || [])];
+  const seen = new Set<number>();
+  const comments: Comment[] = [];
+  let fetchedCount = 0;
+  const maxFetchedItems = limit * 4;
+
+  while (queue.length && comments.length < limit && fetchedCount < maxFetchedItems) {
+    const remaining = maxFetchedItems - fetchedCount;
+    const batchIds = queue.splice(0, Math.min(8, remaining)).filter((id) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    if (!batchIds.length) continue;
+
+    const items = await Promise.all(batchIds.map((id) => fetchHnApiItem(id)));
+    fetchedCount += batchIds.length;
+    for (const item of items) {
+      if (item?.kids?.length) queue.push(...item.kids);
+      const comment = normalizeHnApiComment(item);
+      if (comment) comments.push(comment);
+      if (comments.length >= limit) break;
+    }
+  }
+
+  feedCache.set(cacheKey, { expiresAt: Date.now() + config.cacheTtlMs, comments });
+  return comments;
 }
 
 export async function getComments(storyId: string): Promise<Comment[]> {
