@@ -140,7 +140,10 @@ export async function generateDiscussionArticle(
   await loadArticleCache();
   const signature = makeSignature(story, comments);
   const cached = articleCache[story.id];
-  if (cached && cached.signature === signature && !force) return { ...cached, status: "cached" };
+  const hasReusableCache = cached
+    && cached.signature === signature
+    && (cached.status === "generated" || cached.status === "cached");
+  if (hasReusableCache && !force) return { ...cached, status: "cached" };
 
   if (!comments.length) return fallbackArticle(story, translation, comments, "fallback");
   if (!isTranslationEnabled()) return fallbackArticle(story, translation, comments, "disabled");
