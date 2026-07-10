@@ -558,7 +558,8 @@ button {
   border-radius: var(--radius);
   padding: 20px 22px 18px;
   box-shadow: var(--shadow-card);
-  transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+  cursor: pointer;
+  transition: box-shadow 200ms var(--ease-out);
   /* stagger 入场 */
   opacity: 0;
   transform: translateY(8px);
@@ -584,7 +585,6 @@ button {
 
 @media (hover: hover) and (pointer: fine) {
   .story:hover {
-    transform: translateY(-2px);
     box-shadow: var(--shadow-hover);
   }
 }
@@ -714,11 +714,6 @@ button {
   color: var(--ink-2);
 }
 
-.meta-actions {
-  gap: 4px 14px;
-  margin-top: 3px;
-}
-
 .points {
   display: inline-flex;
   align-items: center;
@@ -841,6 +836,7 @@ button {
   margin-top: 14px;
   display: none;
   opacity: 0;
+  cursor: auto;
   transition: opacity 180ms var(--ease-out);
 }
 .comments-container.open {
@@ -1428,7 +1424,6 @@ button {
     margin: -7px -4px;
     padding: 0 4px;
   }
-  .meta-actions { margin-top: 7px; }
   .discussion-tabs button { height: 36px; }
   .toast { bottom: 14px; }
 }
