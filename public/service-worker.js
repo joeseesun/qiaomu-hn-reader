@@ -1,10 +1,10 @@
-const CACHE = "hn-qiaomu-v0.5.8";
+const CACHE = "hn-qiaomu-v0.5.9";
 const ASSETS = [
   "/",
   "/offline.html",
-  "/styles.css?v=0.5.8",
-  "/lucide-icons.js?v=0.5.8",
-  "/app.js?v=0.5.8",
+  "/styles.css?v=0.5.9",
+  "/lucide-icons.js?v=0.5.9",
+  "/app.js?v=0.5.9",
   "/favicon.svg",
   "/manifest.webmanifest",
   "/icons/apple-touch-icon.png",

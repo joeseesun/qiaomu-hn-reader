@@ -53,7 +53,7 @@
 2. 对标题、域名和链接做政治/军事/敏感议题/招聘广告过滤，过滤详情只留在服务端。
 3. 调用 DeepSeek `deepseek-v4-flash` 翻译标题和摘要，写入 `.data/feed-snapshot.json`。
 4. 选出评论预热候选：优先首页前 70%，再按 `points * 1.2 + comments * 2.4 - ageHours * 1.8` 排序补齐。
-5. 每个候选默认抓取前 24 条评论；评论抓取失败会轻量重试一次，仍失败时保留上次可用缓存。
+5. 每个候选默认抓取前 24 条评论；HNRSS 评论抓取失败会轻量重试一次，仍失败或明明有评论却返回空时，回退到 Hacker News 官方 Firebase API 读取评论树。
 6. 评论翻译或讨论速读生成失败不会清空评论列表，最佳评论会继续基于已抓到的原文和可用译文计算。
 7. 讨论文章按帖子和评论内容签名缓存到 `.data/discussion-articles.json`；评论没变则直接复用。
 8. 首页 HTML 内嵌默认首页快照，前端同步渲染首屏；API 请求只做静默刷新和兜底更新。
@@ -81,11 +81,14 @@ npm start
 |---|---|---|
 | `PORT` | `3000` | Node 服务端口 |
 | `PUBLIC_BASE_URL` | `http://127.0.0.1:3000` | 页面 canonical、OpenAPI server 地址 |
+| `HNRSS_BASE_URL` | `https://hnrss.org` | HNRSS story 与评论 feed 地址 |
 | `HN_REFRESH_INTERVAL_MS` | `3600000` | 后台快照刷新周期 |
 | `HN_REFRESH_STARTUP_DELAY_MS` | `1000` | 启动后第一次刷新延迟 |
 | `HN_STORY_PREFETCH_LIMIT` | `30` | 每个 feed 预抓 story 数 |
 | `HN_COMMENT_PREFETCH_LIMIT` | `12` | 每轮预热评论的帖子数 |
 | `HN_COMMENTS_PER_STORY` | `24` | 每个帖子缓存评论数 |
+| `HN_API_BASE_URL` | `https://hacker-news.firebaseio.com/v0` | HNRSS 评论不可用时的官方 API 回退地址 |
+| `HN_API_TIMEOUT_MS` | `10000` | 官方 HN API 单个 item 请求超时 |
 | `DEEPSEEK_API_KEY` | 空 | 服务端翻译和讨论速读密钥 |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 兼容接口地址 |
 | `DEEPSEEK_MODEL` | `deepseek-v4-flash` | 翻译和讨论文章模型 |
@@ -152,7 +155,7 @@ SMOKE_BASE_URL=https://hn.qiaomu.ai npm run smoke:api
 
 ## 限制与边界
 
-- HNRSS 不提供单条评论的官方投票数；“最佳评论”和“精选评论观点”使用本地启发式排序：优先有观点、经验、取舍、原因、反例或链接的评论；没有明显长评论时，选择最长且非纯感谢/附和/玩笑的可读评论。
+- HNRSS 和 Hacker News 官方 API 都不提供单条评论的公开分数；“最佳评论”和“精选评论观点”使用本地启发式排序：优先有观点、经验、取舍、原因、反例或链接的评论；没有明显长评论时，选择最长且非纯感谢/附和/玩笑的可读评论。
 - 首页条目数量取决于当前 HNRSS 快照和风险过滤结果，因此 UI 不提供 20/30/50 这类容易误导的条数筛选。
 - 风险过滤是保守规则，不等同于内容审核系统；招聘广告过滤会保留 `Launch HN` 这类真正的新产品发布。
 - DeepSeek 失败或未配置 key 时，讨论速读会显示“生成速读中”或降级结果。
@@ -188,7 +191,7 @@ Qiaomu HN Reader is a Chinese-first Hacker News reader for developers and produc
 
 - Chinese story titles and summaries from cached snapshots.
 - Rising and product-radar sections.
-- Cached comments and translated comment text.
+- Cached comments and translated comment text, with the official HN API as a fallback when HNRSS comments are unavailable.
 - AI-generated discussion summaries when available.
 - Local-only favorites via `localStorage`.
 - Conservative risk filtering for politics, military, and sensitive topics.
@@ -218,7 +221,7 @@ For a production deployment, set `SMOKE_BASE_URL` to the live URL.
 
 ## Important Limits
 
-- HNRSS does not expose official per-comment vote counts. Best comments and quoted viewpoints are local heuristics, not official HN rankings.
+- Neither HNRSS nor the official HN API exposes public per-comment scores. Best comments and quoted viewpoints are local heuristics, not official HN rankings.
 - The visible story count depends on the current HNRSS snapshot and the risk filter.
 - DeepSeek is optional but required for fresh translations and generated discussion summaries.
 - This is not an official Hacker News product.
