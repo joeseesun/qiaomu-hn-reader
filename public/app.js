@@ -4,6 +4,7 @@ const READ_STORIES_KEY = "qiaomu-hn-read-stories-v2";
 const LEGACY_READING_PROGRESS_KEY = "qiaomu-hn-reading-progress-v1";
 const RECENT_CACHE_LIMIT = 8;
 const READ_STORIES_LIMIT = 1000;
+const AUTO_REFRESH_CHECK_MS = 5 * 60 * 1000;
 
 const supportDialogs = {
   follow: {
@@ -49,6 +50,9 @@ const state = {
   storyCache: new Map(),
   translationCache: {},
   initialData: null,
+  snapshotAt: null,
+  pendingSnapshotAt: null,
+  autoRefreshInFlight: false,
   serviceWorkerUpdateShown: false,
   supportDialogTrigger: null
 };
@@ -276,6 +280,17 @@ function readInitialData() {
     return JSON.parse(node.textContent);
   } catch {
     return null;
+  }
+}
+
+function rememberSnapshot(freshness) {
+  const generatedAt = freshness?.generatedAt;
+  if (!generatedAt || !Number.isFinite(Date.parse(generatedAt))) return;
+  if (!state.snapshotAt || Date.parse(generatedAt) > Date.parse(state.snapshotAt)) {
+    state.snapshotAt = generatedAt;
+  }
+  if (state.pendingSnapshotAt && Date.parse(state.snapshotAt) >= Date.parse(state.pendingSnapshotAt)) {
+    state.pendingSnapshotAt = null;
   }
 }
 
@@ -537,9 +552,10 @@ async function loadStories({ silent = false } = {}) {
   if (!silent) setSkeleton(8);
 
   try {
-    const response = await fetch(cacheKey, { signal: state.storiesAbort.signal });
+    const response = await fetch(cacheKey, { signal: state.storiesAbort.signal, cache: "no-cache" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    rememberSnapshot(data.freshness);
     renderStories(data.stories || [], data.translations || {}, data.freshness || {}, data.discussions || {}, { animate: !silent });
     saveRecentCache(cacheKey, {
       stories: data.stories || [],
@@ -572,9 +588,10 @@ async function loadInsights() {
   state.insightsAbort = new AbortController();
   const cacheKey = "/api/insights";
   try {
-    const response = await fetch(cacheKey, { signal: state.insightsAbort.signal });
+    const response = await fetch(cacheKey, { signal: state.insightsAbort.signal, cache: "no-cache" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    rememberSnapshot(data.freshness);
     state.insights = data.insights || null;
     state.insightDiscussions = data.discussions || {};
     saveRecentCache(cacheKey, {
@@ -637,6 +654,7 @@ function applyInitialHomeData() {
   const home = state.initialData.home;
   state.insights = state.initialData.insights || null;
   state.insightDiscussions = state.initialData.insightDiscussions || {};
+  rememberSnapshot(home.freshness);
   el.toolbar.hidden = false;
   el.feedTitle.textContent = "首页精选";
   renderStories(home.stories || [], home.translations || {}, home.freshness || {}, home.discussions || {}, { animate: false });
@@ -772,6 +790,54 @@ async function loadCurrentView({ silent = false } = {}) {
   if (state.activeView === "home") return loadStories({ silent });
   if (state.activeView === "favorites") return renderFavoritesView();
   return renderInsightView(state.activeView);
+}
+
+function canApplyAutomaticRefresh() {
+  const hasOpenDiscussion = Boolean(el.storyList.querySelector(".comments-container:not([hidden])"));
+  return document.visibilityState === "visible"
+    && !state.refreshing
+    && window.scrollY < 240
+    && !hasOpenDiscussion
+    && document.activeElement !== el.searchInput;
+}
+
+async function applyPendingSnapshot() {
+  if (!state.pendingSnapshotAt || !canApplyAutomaticRefresh()) return false;
+  const activeView = state.activeView;
+
+  if (activeView === "home") {
+    await loadStories({ silent: true });
+    state.insights = null;
+    loadInsights().catch(() => {});
+  } else if (activeView === "rising" || activeView === "productRadar") {
+    state.insights = null;
+    await loadInsights();
+    if (state.activeView === activeView) await renderInsightView(activeView);
+  } else {
+    return false;
+  }
+
+  state.pendingSnapshotAt = null;
+  return true;
+}
+
+async function checkForNewSnapshot() {
+  if (state.autoRefreshInFlight || document.visibilityState !== "visible") return;
+  state.autoRefreshInFlight = true;
+  try {
+    const response = await fetch("/api/status", { cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json();
+    const latestAt = data.snapshot?.generatedAt;
+    if (!latestAt || !Number.isFinite(Date.parse(latestAt))) return;
+    if (state.snapshotAt && Date.parse(latestAt) <= Date.parse(state.snapshotAt)) return;
+    state.pendingSnapshotAt = latestAt;
+    await applyPendingSnapshot();
+  } catch {
+    // Offline mode keeps the latest successful snapshot visible.
+  } finally {
+    state.autoRefreshInFlight = false;
+  }
 }
 
 async function setActiveView(viewId) {
@@ -1056,6 +1122,7 @@ async function init() {
   }
 
   registerServiceWorker().catch(() => {});
+  setInterval(() => checkForNewSnapshot(), AUTO_REFRESH_CHECK_MS);
 }
 
 el.viewTabs.addEventListener("click", (event) => {
@@ -1223,6 +1290,13 @@ window.addEventListener("popstate", () => {
   setSortButton();
   loadCurrentView().catch(() => showToast("这一栏暂时没读到"));
 });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkForNewSnapshot();
+});
+window.addEventListener("focus", () => checkForNewSnapshot());
+window.addEventListener("scroll", debounce(() => {
+  if (state.pendingSnapshotAt) applyPendingSnapshot().catch(() => {});
+}, 240), { passive: true });
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, select, textarea")) return;
   if (event.key === "r" || event.key === "R") {

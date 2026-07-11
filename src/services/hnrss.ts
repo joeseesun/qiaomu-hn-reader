@@ -21,6 +21,10 @@ type HnApiItem = {
   id?: number;
   by?: string;
   time?: number;
+  title?: string;
+  url?: string;
+  score?: number;
+  descendants?: number;
   text?: string;
   type?: string;
   kids?: number[];
@@ -66,6 +70,34 @@ export type Comment = {
 const parser = new Parser();
 type FeedCacheValue = { expiresAt: number; stories: Story[] } | { expiresAt: number; comments: Comment[] };
 const feedCache = new Map<string, FeedCacheValue>();
+
+class HnrssHttpError extends Error {
+  status: number;
+  retryAfterMs: number | null;
+
+  constructor(status: number, retryAfter: string | null) {
+    super(`HNRSS JSON Feed ${status}`);
+    this.status = status;
+    const retryAfterSeconds = Number(retryAfter || "");
+    this.retryAfterMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? retryAfterSeconds * 1000
+      : null;
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function messageForError(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown";
+}
+
+function isRateLimitError(error: unknown) {
+  return error instanceof HnrssHttpError
+    ? error.status === 429
+    : /(?:status code|feed)\s*429|\b429\b/i.test(messageForError(error));
+}
 
 function clampLimit(value: unknown, fallback = 30) {
   const parsed = Number(value || fallback);
@@ -182,7 +214,7 @@ async function fetchJsonFeed(url: string, topic: Topic, sourceFeed: string) {
       "user-agent": "hn.qiaomu.ai/0.1 (+https://hn.qiaomu.ai)"
     }
   });
-  if (!response.ok) throw new Error(`HNRSS JSON Feed ${response.status}`);
+  if (!response.ok) throw new HnrssHttpError(response.status, response.headers.get("retry-after"));
   const feed = (await response.json()) as JsonFeed;
   return (feed.items || []).map((item) => normalizeJsonItem(item, topic, sourceFeed)).filter(Boolean) as Story[];
 }
@@ -190,6 +222,104 @@ async function fetchJsonFeed(url: string, topic: Topic, sourceFeed: string) {
 async function fetchRssFeed(url: string, topic: Topic, sourceFeed: string) {
   const feed = await parser.parseURL(url);
   return feed.items.map((item) => normalizeRssItem(item, topic, sourceFeed)).filter(Boolean) as Story[];
+}
+
+async function fetchHnrssStories(jsonUrl: string, rssUrl: string, topic: Topic, sourceFeed: string) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= config.hnrssRetries; attempt++) {
+    try {
+      return await fetchJsonFeed(jsonUrl, topic, sourceFeed);
+    } catch (jsonError) {
+      lastError = jsonError;
+      if (!isRateLimitError(jsonError)) {
+        try {
+          return await fetchRssFeed(rssUrl, topic, sourceFeed);
+        } catch (rssError) {
+          lastError = rssError;
+        }
+      }
+    }
+
+    if (attempt < config.hnrssRetries) {
+      const retryAfterMs = lastError instanceof HnrssHttpError ? lastError.retryAfterMs : null;
+      const backoffMs = config.hnrssRetryDelayMs * (2 ** attempt);
+      await sleep(Math.max(retryAfterMs || 0, isRateLimitError(lastError) ? 8_000 : backoffMs));
+    }
+  }
+  throw lastError;
+}
+
+function hnApiEndpointForTopic(topic: Topic) {
+  if (topic.id === "frontpage") return "topstories";
+  if (topic.id === "active") return "beststories";
+  if (topic.id === "show") return "showstories";
+  if (topic.id === "launches") return "newstories";
+  return null;
+}
+
+function normalizeHnApiStory(item: HnApiItem | null, topic: Topic, sourceFeed: string): Story | null {
+  if (!item?.id || item.type !== "story" || item.deleted || item.dead || !item.title) return null;
+  if (topic.id === "launches" && !/^Launch HN:/i.test(item.title.trim())) return null;
+  const commentsUrl = `https://news.ycombinator.com/item?id=${item.id}`;
+  const url = item.url || commentsUrl;
+  return {
+    id: String(item.id),
+    hnId: String(item.id),
+    title: item.title.trim(),
+    url,
+    commentsUrl,
+    domain: getDomain(url),
+    author: item.by || "unknown",
+    points: item.score ?? null,
+    comments: item.descendants ?? 0,
+    publishedAt: item.time ? new Date(item.time * 1000).toISOString() : null,
+    sourceFeed,
+    topicId: topic.id,
+    topicLabel: topic.label
+  };
+}
+
+async function fetchHnApiJson<T>(pathname: string): Promise<T> {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), config.hnApiTimeoutMs);
+  try {
+    const response = await fetch(`${config.hnApiBaseUrl}/${pathname.replace(/^\/+/, "")}`, {
+      signal: abort.signal,
+      headers: {
+        accept: "application/json",
+        "user-agent": "hn.qiaomu.ai/0.7 (+https://hn.qiaomu.ai)"
+      }
+    });
+    if (!response.ok) throw new Error(`HN API ${pathname} ${response.status}`);
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchStoriesFromHnApi(topic: Topic, limit: number) {
+  const endpoint = hnApiEndpointForTopic(topic);
+  if (!endpoint) throw new Error(`HN API has no fallback for topic ${topic.id}`);
+  const ids = await fetchHnApiJson<number[]>(`${endpoint}.json`);
+  const scanLimit = topic.id === "launches"
+    ? Math.min(150, Math.max(limit * 5, 100))
+    : Math.min(ids.length, Math.max(limit + 10, Math.ceil(limit * 1.5)));
+  const selectedIds = ids.slice(0, scanLimit);
+  const stories: Story[] = [];
+  const sourceFeed = `hn-api:${endpoint}`;
+
+  for (let offset = 0; offset < selectedIds.length; offset += 10) {
+    const batch = await Promise.all(selectedIds.slice(offset, offset + 10).map((id) => (
+      fetchHnApiJson<HnApiItem | null>(`item/${id}.json`).catch(() => null)
+    )));
+    stories.push(...batch
+      .map((item) => normalizeHnApiStory(item, topic, sourceFeed))
+      .filter((story): story is Story => Boolean(story)));
+    if (stories.length >= limit) break;
+  }
+
+  if (!stories.length) throw new Error(`HN API ${endpoint} returned no usable stories`);
+  return stories.slice(0, limit);
 }
 
 export async function getStories(query: StoryQuery = {}) {
@@ -211,21 +341,31 @@ export async function getStories(query: StoryQuery = {}) {
     points: topic.minPoints,
     comments: topic.minComments
   };
+  const effectiveQuery = {
+    ...query,
+    minPoints: query.minPoints ?? topic.minPoints,
+    minComments: query.minComments ?? topic.minComments
+  };
   const cacheKey = JSON.stringify({ feed, params, topic: topic.id });
   const cached = feedCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() && "stories" in cached) return applyLocalFilters(cached.stories, query).slice(0, limit);
+  if (cached && cached.expiresAt > Date.now() && "stories" in cached) return applyLocalFilters(cached.stories, effectiveQuery).slice(0, limit);
 
   const jsonUrl = buildUrl(feed, params, "jsonfeed");
   const rssUrl = buildUrl(feed, params, "rss");
   let stories: Story[];
   try {
-    stories = await fetchJsonFeed(jsonUrl, topic, feed);
-  } catch {
-    stories = await fetchRssFeed(rssUrl, topic, feed);
+    stories = await fetchHnrssStories(jsonUrl, rssUrl, topic, feed);
+  } catch (hnrssError) {
+    try {
+      stories = await fetchStoriesFromHnApi(topic, remoteLimit);
+      console.warn(`[feeds] topic=${topic.id} fallback=hn-api reason=${messageForError(hnrssError)}`);
+    } catch (hnApiError) {
+      throw new Error(`${messageForError(hnrssError)}; HN API fallback: ${messageForError(hnApiError)}`);
+    }
   }
 
   feedCache.set(cacheKey, { expiresAt: Date.now() + config.cacheTtlMs, stories });
-  return applyLocalFilters(stories, query).slice(0, limit);
+  return applyLocalFilters(stories, effectiveQuery).slice(0, limit);
 }
 
 export async function getMergedStories(topicIds: string[], limitPerTopic = 20) {
@@ -277,21 +417,7 @@ function normalizeComment(item: JsonFeedItem): Comment | null {
 }
 
 async function fetchHnApiItem(id: string | number): Promise<HnApiItem | null> {
-  const abort = new AbortController();
-  const timeout = setTimeout(() => abort.abort(), config.hnApiTimeoutMs);
-  try {
-    const response = await fetch(`${config.hnApiBaseUrl}/item/${id}.json`, {
-      signal: abort.signal,
-      headers: {
-        accept: "application/json",
-        "user-agent": "hn.qiaomu.ai/0.5 (+https://hn.qiaomu.ai)"
-      }
-    });
-    if (!response.ok) throw new Error(`HN API item ${response.status}`);
-    return (await response.json()) as HnApiItem | null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetchHnApiJson<HnApiItem | null>(`item/${id}.json`);
 }
 
 function normalizeHnApiComment(item: HnApiItem | null): Comment | null {
