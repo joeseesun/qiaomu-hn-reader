@@ -50,14 +50,14 @@
 
 默认配置下，服务启动后会延迟执行一次后台预热，之后每 1 小时刷新一次：
 
-1. 从 HNRSS 拉取 `frontpage`、`active`、`show`、`launches`。
+1. 从 HNRSS 拉取 `frontpage`、`active`、`show`、`launches`；JSON/RSS 均失败时退避重试，仍失败则改用 Hacker News 官方 Firebase API。`Launch HN` 从官方 `newstories` 中筛选，不用其他帖子补位。
 2. 对标题、域名和链接做政治/军事/敏感议题/招聘广告过滤，过滤详情只留在服务端。
 3. 调用 DeepSeek `deepseek-v4-flash` 翻译标题和摘要，写入 `.data/feed-snapshot.json`。
 4. 选出评论预热候选：优先首页前 70%，再按 `points * 1.2 + comments * 2.4 - ageHours * 1.8` 排序补齐。
 5. 每个候选默认抓取前 24 条评论；HNRSS 评论抓取失败会轻量重试一次，仍失败或明明有评论却返回空时，回退到 Hacker News 官方 Firebase API 读取评论树。
 6. 评论翻译或讨论速读生成失败不会清空评论列表，最佳评论会继续基于已抓到的原文和可用译文计算。
 7. 讨论文章按帖子和评论内容签名缓存到 `.data/discussion-articles.json`；评论没变则直接复用。
-8. 首页 HTML 内嵌默认首页快照，前端同步渲染首屏；API 请求只做静默刷新和兜底更新。
+8. 首页 HTML 内嵌默认首页快照，前端同步渲染首屏；页面每 5 分钟及重新回到前台时检查新快照，在不打断滚动、搜索和展开评论的前提下静默换新。
 
 前端不会实时调用 DeepSeek，也不会把 API key 暴露给浏览器。
 
@@ -84,12 +84,14 @@ npm start
 | `HOST` | `127.0.0.1` | Node 监听地址，默认仅允许本机反向代理访问 |
 | `PUBLIC_BASE_URL` | `http://127.0.0.1:3000` | 页面 canonical、OpenAPI server 地址 |
 | `HNRSS_BASE_URL` | `https://hnrss.org` | HNRSS story 与评论 feed 地址 |
+| `HN_HNRSS_RETRIES` | `2` | HNRSS story feed 失败后的退避重试次数 |
+| `HN_HNRSS_RETRY_DELAY_MS` | `4000` | HNRSS story feed 重试基础延迟；429 最少等待 8 秒 |
 | `HN_REFRESH_INTERVAL_MS` | `3600000` | 后台快照刷新周期 |
 | `HN_REFRESH_STARTUP_DELAY_MS` | `1000` | 启动后第一次刷新延迟 |
 | `HN_STORY_PREFETCH_LIMIT` | `30` | 每个 feed 预抓 story 数 |
 | `HN_COMMENT_PREFETCH_LIMIT` | `12` | 每轮预热评论的帖子数 |
 | `HN_COMMENTS_PER_STORY` | `24` | 每个帖子缓存评论数 |
-| `HN_API_BASE_URL` | `https://hacker-news.firebaseio.com/v0` | HNRSS 评论不可用时的官方 API 回退地址 |
+| `HN_API_BASE_URL` | `https://hacker-news.firebaseio.com/v0` | HNRSS story 或评论不可用时的官方 API 回退地址 |
 | `HN_API_TIMEOUT_MS` | `10000` | 官方 HN API 单个 item 请求超时 |
 | `DEEPSEEK_API_KEY` | 空 | 服务端翻译和讨论速读密钥 |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek 兼容接口地址 |
@@ -193,7 +195,8 @@ Qiaomu HN Reader is a Chinese-first Hacker News reader for developers and produc
 
 - Chinese story titles and summaries from cached snapshots.
 - Rising and product-radar sections.
-- Cached comments and translated comment text, with the official HN API as a fallback when HNRSS comments are unavailable.
+- HNRSS retry with official HN API fallback for top, best, show, launch, and comment data.
+- Automatic snapshot checks every five minutes and when the page returns to the foreground, without interrupting active reading.
 - AI-generated discussion summaries when available.
 - Local-only favorites via `localStorage`.
 - Conservative risk filtering for politics, military, and sensitive topics.

@@ -5,6 +5,8 @@ export const config = {
   host: process.env.HOST || "127.0.0.1",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:3000",
   hnrssBaseUrl: process.env.HNRSS_BASE_URL || "https://hnrss.org",
+  hnrssRetries: Number(process.env.HN_HNRSS_RETRIES || 2),
+  hnrssRetryDelayMs: Number(process.env.HN_HNRSS_RETRY_DELAY_MS || 4_000),
   hnApiBaseUrl: (process.env.HN_API_BASE_URL || "https://hacker-news.firebaseio.com/v0").replace(/\/+$/, ""),
   hnApiTimeoutMs: Number(process.env.HN_API_TIMEOUT_MS || 10_000),
   cacheTtlMs: Number(process.env.HN_CACHE_TTL_MS || 5 * 60 * 1000),
