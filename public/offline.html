@@ -3,27 +3,28 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#faf9f7" />
-    <meta name="color-scheme" content="light" />
     <meta name="robots" content="noindex" />
     <title>离线 · 乔木 HN 速读</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=0.7.2" />
-    <script defer src="/lucide-icons.js?v=0.7.2"></script>
+    <script>
+      try { const t = localStorage.getItem("hn-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+    </script>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="/fonts/fonts.css?v=0.8.0" />
+    <link rel="stylesheet" href="/styles.css?v=0.8.0" />
   </head>
-  <body class="offline-body">
+  <body>
     <main class="offline-shell">
-      <a class="brand offline-brand" href="/" aria-label="乔木 HN 速读首页">
-        <img class="brand-icon" src="/favicon.svg" width="22" height="22" alt="" aria-hidden="true" />
-        <span class="brand-name">乔木 HN 速读</span>
-      </a>
+      <a class="offline-brand" href="/">乔木 HN 速读</a>
       <section class="offline-panel" aria-labelledby="offline-title">
-        <span class="offline-icon" data-lucide="newspaper" aria-hidden="true"></span>
+        <p class="kicker">Offline</p>
         <h1 id="offline-title">当前离线</h1>
         <p>已缓存的首页仍可打开；恢复网络后会继续同步最新 Hacker News 快照。</p>
-        <a class="offline-action" href="/">回到首页</a>
+        <a class="more" href="/">回到首页</a>
       </section>
     </main>
   </body>

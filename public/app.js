@@ -8,14 +8,14 @@ const AUTO_REFRESH_CHECK_MS = 5 * 60 * 1000;
 
 const supportDialogs = {
   follow: {
-    kicker: "微信公众号",
+    kicker: "WeChat",
     title: "关注向阳乔木",
     image: "/assets/qiaomu_wechat_public_account_qr.jpg",
     imageAlt: "向阳乔木推荐看微信公众号二维码",
-    description: "微信扫码关注「向阳乔木推荐看」。"
+    description: "微信扫码关注公众号「向阳乔木推荐看」；在微信里打开本页时，长按二维码识别。"
   },
   reward: {
-    kicker: "支持创作",
+    kicker: "Support",
     title: "打赏支持",
     image: "/assets/qiaomu_reward_qr.png",
     imageAlt: "向阳乔木打赏二维码",
@@ -24,10 +24,10 @@ const supportDialogs = {
 };
 
 const views = [
-  { id: "home", label: "首页精选" },
-  { id: "rising", label: "升温榜" },
-  { id: "productRadar", label: "产品雷达" },
-  { id: "favorites", label: "收藏" }
+  { id: "home", label: "首页精选", kicker: "Front page" },
+  { id: "rising", label: "升温榜", kicker: "Rising" },
+  { id: "productRadar", label: "产品雷达", kicker: "Product radar" },
+  { id: "favorites", label: "收藏", kicker: "Saved" }
 ];
 
 const state = {
@@ -63,6 +63,10 @@ const el = {
   viewTabs: document.querySelector("[data-view-tabs]"),
   storyList: document.querySelector("[data-story-list]"),
   feedTitle: document.querySelector("[data-feed-title]"),
+  feedKicker: document.querySelector("[data-feed-kicker]"),
+  navbar: document.querySelector("[data-navbar]"),
+  mast: document.querySelector(".mast"),
+  dateline: document.querySelector("[data-dateline]"),
   feedCount: document.querySelector("[data-feed-count]"),
   feedStatus: document.querySelector("[data-feed-status]"),
   searchInput: document.querySelector("[data-search-input]"),
@@ -71,6 +75,7 @@ const el = {
   refreshBtn: document.querySelector('[data-action="refresh"]'),
   installAppBtn: document.querySelector('[data-action="install-app"]'),
   sortPointsBtn: document.querySelector('[data-action="sort-points"]'),
+  sortArrow: document.querySelector("[data-sort-arrow]"),
   exportFavoritesBtn: document.querySelector('[data-action="export-favorites"]'),
   supportDialog: document.querySelector("[data-support-dialog]"),
   supportKicker: document.querySelector("[data-support-kicker]"),
@@ -196,6 +201,23 @@ function closeSupportDialog() {
     el.supportDialog.close();
   } else {
     el.supportDialog.removeAttribute("open");
+  }
+}
+
+function toggleTheme() {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("hn-theme", root.dataset.theme); } catch {}
+}
+
+function setupMasthead() {
+  if (el.dateline) {
+    const now = new Date();
+    el.dateline.textContent = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }
+  if (el.mast && el.navbar && "IntersectionObserver" in window) {
+    new IntersectionObserver(([entry]) => el.navbar.classList.toggle("scrolled", !entry.isIntersecting)).observe(el.mast);
   }
 }
 
@@ -367,7 +389,7 @@ function setFavorite(storyId, shouldSave) {
 function renderViewTabs() {
   if (!el.viewTabs.children.length) {
     el.viewTabs.innerHTML = views.map((view) => `
-      <button class="section-tab" id="view-tab-${escapeHtml(view.id)}" type="button" role="tab" aria-controls="feed" data-view="${escapeHtml(view.id)}">${escapeHtml(view.label)}</button>
+      <button class="nav-tab" id="view-tab-${escapeHtml(view.id)}" type="button" role="tab" aria-controls="feed" data-view="${escapeHtml(view.id)}">${escapeHtml(view.label)}</button>
     `).join("");
   }
   el.viewTabs.querySelectorAll("[data-view]").forEach((button) => {
@@ -377,18 +399,22 @@ function renderViewTabs() {
     button.tabIndex = active ? 0 : -1;
   });
   el.storyList.setAttribute("aria-labelledby", `view-tab-${state.activeView}`);
+  setFeedKicker();
+}
+
+function setFeedKicker() {
+  if (!el.feedKicker) return;
+  const searching = state.activeView === "home" && el.searchInput.value.trim();
+  el.feedKicker.textContent = searching ? "Search" : (views.find((view) => view.id === state.activeView)?.kicker || "");
 }
 
 function setSkeleton(count = 5) {
   setFeedBusy(true);
   el.storyList.innerHTML = Array.from({ length: count }, () => `
     <div class="skeleton" aria-hidden="true">
-      <div class="skeleton-rank"></div>
-      <div class="skeleton-body">
-        <div class="skeleton-line w-zh"></div>
-        <div class="skeleton-line w-en"></div>
-        <div class="skeleton-line w-meta"></div>
-      </div>
+      <div class="skeleton-line w-zh"></div>
+      <div class="skeleton-line w-en"></div>
+      <div class="skeleton-line w-meta"></div>
     </div>
   `).join("");
 }
@@ -401,10 +427,8 @@ function setSortButton() {
   if (!el.sortPointsBtn) return;
   const desc = state.pointsSort === "desc";
   el.sortPointsBtn.dataset.sortPoints = state.pointsSort;
-  el.sortPointsBtn.setAttribute("aria-label", desc ? "当前按热度从高到低,点击改为低到高" : "当前按热度从低到高,点击改为高到低");
-  const icon = el.sortPointsBtn.querySelector("[data-lucide]");
-  if (icon) icon.setAttribute("data-lucide", desc ? "arrow-down-wide-narrow" : "arrow-up-narrow-wide");
-  renderIcons(el.sortPointsBtn);
+  el.sortPointsBtn.setAttribute("aria-label", desc ? "当前按热度从高到低，点击改为低到高" : "当前按热度从低到高，点击改为高到低");
+  if (el.sortArrow) el.sortArrow.textContent = desc ? "↓" : "↑";
 }
 
 function storyUrl() {
@@ -449,7 +473,6 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
   state.discussions = discussions || {};
   state.translationCache = { ...translations };
   state.storyCache.clear();
-  const animate = options.animate !== false;
 
   if (!stories.length) {
     el.storyList.innerHTML = `
@@ -474,8 +497,7 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
     const titleZh = hasZh ? t.titleZh : "";
     const summary = hasZh && t?.summaryZh ? t.summaryZh : story.reason || "";
     const noZh = !hasZh ? " no-translation" : "";
-    const delay = animate && i < 12 ? Math.min(i * 45, 360) : 0;
-    const rank = String(i + 1).padStart(2, "0");
+      const rank = String(i + 1).padStart(2, "0");
     const commentId = storyCommentId(story);
     const commentsCount = story.comments ?? 0;
     const discussion = discussions[story.id] || {};
@@ -484,45 +506,39 @@ function renderStories(stories, translations = {}, freshness = {}, discussions =
     const favorite = isFavorite(story.id);
 
     return `
-      <article class="story${noZh}${animate ? "" : " story-instant"}" data-story-id="${escapeHtml(story.id)}" data-story-url="${escapeHtml(story.url)}" data-comment-id="${escapeHtml(commentId)}" style="animation-delay:${delay}ms">
-        <div class="story-rank">${rank}</div>
+      <article class="story${noZh}" data-story-id="${escapeHtml(story.id)}" data-story-url="${escapeHtml(story.url)}" data-comment-id="${escapeHtml(commentId)}">
+        <div class="story-rank latin">${rank}</div>
         <div class="story-main">
           <div class="story-topline">
             <div class="story-title-block">
               <span class="sr-only" data-read-status></span>
               ${hasZh ? `
-                <div class="title-zh"><a href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(titleZh)}</a></div>
-                <div class="title-en">${escapeHtml(story.title)}</div>
+                <h2 class="title-zh"><a href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(titleZh)}</a></h2>
+                <p class="title-en">${escapeHtml(story.title)}</p>
               ` : `
-                <div class="title-en"><a href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${escapeHtml(story.title)}</a></div>
+                <h2 class="title-en title-head"><a href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(story.title)}</a></h2>
               `}
             </div>
-            <button class="favorite-btn${favorite ? " is-active" : ""}" type="button" data-toggle-favorite data-story-id="${escapeHtml(story.id)}" aria-pressed="${favorite}" aria-label="${favorite ? "取消收藏" : "收藏"}">
-              <span data-lucide="star" aria-hidden="true"></span>
+            <button class="favorite-btn${favorite ? " is-active" : ""}" type="button" data-toggle-favorite data-story-id="${escapeHtml(story.id)}" aria-pressed="${favorite}" aria-label="${favorite ? "取消收藏" : "收藏"}" title="${favorite ? "取消收藏" : "收藏"}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
             </button>
           </div>
           ${summary ? `<p class="summary">${escapeHtml(summary)}</p>` : ""}
           <div class="story-meta">
-            <div class="meta meta-facts">
-              <span class="points" aria-label="${story.points ?? 0} 热度">${story.points ?? 0}</span>
-              ${commentsCount > 0 ? `
-                <button class="meta-text meta-interactive comment-count-btn" type="button" data-toggle-comments data-preferred-tab="comments" data-comment-id="${escapeHtml(commentId)}" data-comments-count="${commentsCount}">${commentsCount} 评论</button>
-              ` : `<span class="meta-text">0 评论</span>`}
-              <span class="meta-dot">·</span>
-              <a class="meta-text meta-interactive domain domain-link" href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(story.domain)}</a>
-              <span class="meta-dot">·</span>
-              ${commentsCount > 0 ? `
-                ${canReadSummary ? `
-                  <button class="meta-text meta-interactive discuss-btn" type="button" data-toggle-comments data-preferred-tab="summary" data-comment-id="${escapeHtml(commentId)}">讨论速读</button>
-                ` : `<span class="meta-text discuss-status">生成速读中</span>`}
-                <span class="meta-dot">·</span>
-                ${canReadBest ? `
-                  <button class="meta-text meta-interactive discuss-btn" type="button" data-toggle-comments data-preferred-tab="best" data-comment-id="${escapeHtml(commentId)}">最佳评论</button>
-                ` : `<span class="meta-text discuss-status">暂无最佳评论</span>`}
-              ` : `<span class="meta-text discuss-status">暂无讨论</span>`}
-              <span class="meta-dot">·</span>
-              <span class="meta-text">${escapeHtml(formatTime(story.publishedAt))}</span>
-            </div>
+            <span class="points"><span class="latin">${story.points ?? 0}</span> 分</span>
+            ${commentsCount > 0 ? `
+              <button class="meta-btn comment-count-btn" type="button" data-toggle-comments data-preferred-tab="comments" data-comment-id="${escapeHtml(commentId)}" data-comments-count="${commentsCount}">${commentsCount} 评论</button>
+            ` : `<span>0 评论</span>`}
+            <a class="domain" href="${escapeHtml(story.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(story.domain)}</a>
+            ${commentsCount > 0 ? `
+              ${canReadSummary ? `
+                <button class="meta-btn discuss-btn" type="button" data-toggle-comments data-preferred-tab="summary" data-comment-id="${escapeHtml(commentId)}">讨论速读</button>
+              ` : `<span class="discuss-status">生成速读中</span>`}
+              ${canReadBest ? `
+                <button class="meta-btn discuss-btn" type="button" data-toggle-comments data-preferred-tab="best" data-comment-id="${escapeHtml(commentId)}">最佳评论</button>
+              ` : ""}
+            ` : ""}
+            <span class="time">${escapeHtml(formatTime(story.publishedAt))}</span>
           </div>
           <div class="comments-container" data-comments-for="${escapeHtml(commentId)}" hidden></div>
         </div>
@@ -549,6 +565,7 @@ async function loadStories({ silent = false } = {}) {
 
   el.toolbar.hidden = false;
   el.feedTitle.textContent = search ? "搜索结果" : (topic?.label || "首页精选");
+  setFeedKicker();
   if (!silent) setSkeleton(8);
 
   try {
@@ -897,8 +914,7 @@ function renderDiscussionArticle(article, bestComments = [], translations = {}) 
   if (!articleIsReady(article)) {
     return `
       <div class="ai-pending">
-        <span class="ai-pill"><span data-lucide="bot" aria-hidden="true"></span>AI</span>
-        <p>生成速读中。先看评论译文或最佳评论。</p>
+        <p>讨论速读还在生成。先看评论译文或最佳评论。</p>
       </div>
     `;
   }
@@ -906,7 +922,7 @@ function renderDiscussionArticle(article, bestComments = [], translations = {}) 
   const quotes = discussionQuoteRows(article, bestComments, translations);
   return `
     <article class="discussion-article">
-      <div class="discussion-kicker">讨论速读</div>
+      <div class="kicker">Discussion</div>
       <h3>${escapeHtml(article.title || "这条讨论的中文速读")}</h3>
       ${article.lead ? `<p class="discussion-lead">${escapeHtml(article.lead)}</p>` : ""}
       ${highlights.length ? `
@@ -916,7 +932,7 @@ function renderDiscussionArticle(article, bestComments = [], translations = {}) 
       ` : ""}
       ${quotes.length ? `
         <div class="discussion-quotes">
-          <div class="discussion-quotes-head"><span data-lucide="message-square-text" aria-hidden="true"></span>精选评论观点</div>
+          <div class="discussion-quotes-head">精选评论观点</div>
           ${quotes.map((item) => `
             <figure class="discussion-quote">
               <p>${escapeHtml(item.point)}</p>
@@ -993,7 +1009,7 @@ function renderComments(container, comments, translations, article, status, best
     <div id="${groupId}-panel-summary" class="discussion-panel" data-tab-panel="summary" role="tabpanel" aria-labelledby="${groupId}-tab-summary" tabindex="0">${renderDiscussionArticle(article, bestComments, translations)}</div>
     <div id="${groupId}-panel-comments" class="discussion-panel" data-tab-panel="comments" role="tabpanel" aria-labelledby="${groupId}-tab-comments" tabindex="0">
       <div class="comments-list">${commentsHtml}</div>
-      ${hasBest ? `<button class="comments-bottom-switch" type="button" data-switch-tab="best"><span data-lucide="star" aria-hidden="true"></span>看最佳评论</button>` : ""}
+      ${hasBest ? `<button class="more comments-bottom-switch" type="button" data-switch-tab="best">看最佳评论</button>` : ""}
     </div>
     <div id="${groupId}-panel-best" class="discussion-panel" data-tab-panel="best" role="tabpanel" aria-labelledby="${groupId}-tab-best" tabindex="0">
       <div class="comments-list best-comments-list">${bestHtml}</div>
@@ -1089,7 +1105,6 @@ function showServiceWorkerUpdate() {
   state.serviceWorkerUpdateShown = true;
   showToast("新版本已就绪", {
     actionLabel: "刷新",
-    actionIcon: "refresh-cw",
     duration: 12000,
     onAction: () => window.location.reload()
   });
@@ -1105,6 +1120,7 @@ async function registerServiceWorker() {
 }
 
 async function init() {
+  setupMasthead();
   loadFavorites();
   loadReadStories();
   readInitialUrlState();
@@ -1151,12 +1167,14 @@ document.addEventListener("click", (event) => {
   if (action === "refresh") {
     if (state.refreshing) return;
     state.refreshing = true;
-    el.refreshBtn.classList.add("is-spin");
+    el.refreshBtn.textContent = "刷新中";
+    el.refreshBtn.setAttribute("aria-busy", "true");
     state.expandedComments.clear();
     state.insights = null;
     Promise.resolve(loadCurrentView({ silent: false })).finally(() => {
       setTimeout(() => {
-        el.refreshBtn.classList.remove("is-spin");
+        el.refreshBtn.textContent = "刷新";
+        el.refreshBtn.removeAttribute("aria-busy");
         state.refreshing = false;
       }, 500);
       showToast("已刷新");
@@ -1180,6 +1198,8 @@ document.addEventListener("click", (event) => {
     if (state.activeView !== "home") state.activeView = "home";
     syncUrlState({ replace: true });
     loadCurrentView();
+  } else if (action === "toggle-theme") {
+    toggleTheme();
   } else if (action === "export-favorites") {
     exportFavorites();
   } else if (action === "open-support") {

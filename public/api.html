@@ -3,7 +3,6 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f5f0e6" />
     <meta name="robots" content="index,follow" />
     <meta
       name="description"
@@ -21,6 +20,13 @@
     <meta property="og:url" content="%PUBLIC_BASE_URL%/api-docs" />
     <meta property="og:image" content="%PUBLIC_BASE_URL%/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      try { const t = localStorage.getItem("hn-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+    </script>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="/fonts/fonts.css?v=%APP_VERSION%" />
     <link rel="stylesheet" href="/styles.css?v=%APP_VERSION%" />
     %UMAMI_SCRIPT%
   </head>
