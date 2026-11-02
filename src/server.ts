@@ -16,7 +16,7 @@ import { topics } from "./topics.js";
 
 const app = express();
 const publicDir = path.resolve("public");
-const appVersion = "0.7.2";
+const appVersion = "0.8.0";
 
 app.disable("x-powered-by");
 app.use(compression());

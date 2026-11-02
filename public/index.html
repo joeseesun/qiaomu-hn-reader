@@ -3,8 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#faf9f7" />
-    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="乔木 HN 速读" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -32,6 +33,10 @@
     <meta name="twitter:title" content="乔木 HN 速读" />
     <meta name="twitter:description" content="中文速读 Hacker News 最新和热门内容。" />
     <meta name="twitter:image" content="%PUBLIC_BASE_URL%/og-image.png" />
+    <script>
+      try { const t = localStorage.getItem("hn-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+    </script>
+    <link rel="stylesheet" href="/fonts/fonts.css?v=%APP_VERSION%" />
     <link rel="stylesheet" href="/styles.css?v=%APP_VERSION%" />
     %UMAMI_SCRIPT%
     <script type="application/ld+json">
@@ -59,94 +64,87 @@
         }
       }
     </script>
-    <script defer src="/lucide-icons.js?v=%APP_VERSION%"></script>
     %INITIAL_DATA%
     <script type="module" src="/app.js?v=%APP_VERSION%"></script>
   </head>
   <body>
-    <a class="skip-link" href="#feed">跳到新闻列表</a>
+    <a class="skip" href="#feed">跳到新闻列表</a>
 
-    <div class="shell">
-      <header class="topbar">
-        <a class="brand" href="/" aria-label="乔木 HN 速读首页">
-          <img class="brand-icon" src="/favicon.svg" width="22" height="22" alt="" aria-hidden="true" />
-          <span class="brand-name">乔木 HN 速读</span>
-          <span class="brand-sub">Hacker News 中文雷达</span>
-        </a>
-        <div class="topbar-actions">
-          <button class="install-app-btn" type="button" data-action="install-app" hidden>
-            <span data-lucide="download" aria-hidden="true"></span>
-            <span>安装App</span>
-          </button>
+    <header class="mast">
+      <div class="wrap">
+        <p class="dateline"><span>Hacker News 中文速读</span><span class="latin" data-dateline></span></p>
+        <a class="wm" href="/" aria-label="乔木 HN 速读首页">乔木 HN 速读</a>
+        <div class="tools">
+          <button class="icon-btn" type="button" data-action="open-support" data-support="reward" aria-label="打赏支持" title="打赏支持"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.3-9-8.6A4.9 4.9 0 0 1 12 6.3a4.9 4.9 0 0 1 9 5.1C19 15.7 12 20 12 20z"/></svg></button>
+          <button class="icon-btn" type="button" data-action="open-support" data-support="follow" aria-label="关注向阳乔木公众号" title="关注公众号"><svg class="wechat" viewBox="0 0 24 24"><path d="M9.2 3.6C5 3.6 1.8 6.3 1.8 9.7c0 1.9 1 3.6 2.7 4.7l-.6 2.2 2.6-1.4c.8.2 1.7.4 2.6.4"/><path class="front" d="M16 9.4c-3.6 0-6.4 2.4-6.4 5.4s2.8 5.4 6.4 5.4c.8 0 1.5-.1 2.2-.3l2.2 1.2-.5-1.9c1.6-1 2.5-2.6 2.5-4.4 0-3-2.8-5.4-6.4-5.4z"/><circle class="dot" cx="6.6" cy="8.4" r="1"/><circle class="dot" cx="11.6" cy="8.4" r="1"/><circle class="dot" cx="13.8" cy="14" r=".9"/><circle class="dot" cx="18.2" cy="14" r=".9"/></svg></button>
+          <a class="icon-btn" href="https://github.com/joeseesun/qiaomu-hn-reader" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看开源项目" title="GitHub 开源"><svg viewBox="0 0 24 24"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></a>
+          <button class="icon-btn" type="button" data-action="toggle-theme" aria-label="切换深浅色" title="切换深浅色"><svg class="moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <nav class="section-tabs" data-view-tabs role="tablist" aria-label="内容导航" aria-orientation="horizontal"></nav>
+    <nav class="navbar" data-navbar aria-label="栏目">
+      <div class="wrap">
+        <a class="mini" href="/" tabindex="-1" aria-hidden="true">乔木 HN 速读</a>
+        <div class="nav" data-view-tabs role="tablist" aria-label="内容导航" aria-orientation="horizontal"></div>
+        <div class="nav-end">
+          <button class="sub-btn" type="button" data-action="install-app" hidden>安装 App</button>
+          <a class="more nav-link" href="https://tuijian.qiaomu.ai/" target="_blank" rel="noopener">乔木推荐</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="wrap page">
+      <div class="sh">
+        <div>
+          <p class="kicker" data-feed-kicker>Front page</p>
+          <h1 class="feed-title" data-feed-title>首页精选</h1>
+        </div>
+        <div class="sh-end">
+          <span class="sh-note" data-feed-count></span>
+          <button class="more plain" type="button" data-action="export-favorites" hidden>导出收藏 Markdown</button>
+        </div>
+      </div>
 
       <div class="toolbar">
         <label class="search">
-          <span data-lucide="search" aria-hidden="true"></span>
-          <input type="search" data-search-input placeholder="搜索 Hacker News…" autocomplete="off" spellcheck="false" />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="search" data-search-input placeholder="搜索 Hacker News" autocomplete="off" spellcheck="false" aria-label="搜索 Hacker News" />
         </label>
-        <div class="filter-group">
-          <button class="filter-icon" type="button" data-action="sort-points" data-sort-points="desc" aria-label="当前按热度从高到低,点击改为低到高">
-            <span data-lucide="arrow-down-wide-narrow" aria-hidden="true"></span>
-          </button>
-          <button class="filter-icon" type="button" data-action="refresh" aria-label="刷新">
-            <span data-lucide="refresh-cw" aria-hidden="true"></span>
-          </button>
+        <div class="tool-acts">
+          <button class="tool-btn" type="button" data-action="sort-points" data-sort-points="desc" aria-label="当前按热度从高到低，点击改为低到高">热度 <span class="latin" data-sort-arrow>↓</span></button>
+          <button class="tool-btn" type="button" data-action="refresh" aria-label="刷新" title="刷新（R）">刷新</button>
         </div>
       </div>
 
-      <!-- feed 状态头 -->
-      <div class="feed-head">
-        <div class="feed-head-main">
-          <h2 class="feed-title" data-feed-title>首页精选</h2>
-          <span class="feed-count" data-feed-count></span>
-        </div>
-        <div class="feed-actions">
-          <button class="feed-action-btn" type="button" data-action="export-favorites" hidden>
-            <span data-lucide="download" aria-hidden="true"></span>
-            <span>导出收藏</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 新闻流 -->
-      <main id="feed" class="feed" data-story-list role="tabpanel" aria-busy="false"></main>
+      <div id="feed" class="rows" data-story-list role="tabpanel" aria-busy="false"></div>
       <div class="sr-only" data-feed-status role="status" aria-live="polite" aria-atomic="true"></div>
+    </main>
 
-      <!-- 页脚(低干扰署名) -->
-      <footer class="footer">
-        <div class="footer-links">
-          <span>Powered by <a href="https://qiaomu.ai/" target="_blank" rel="noopener noreferrer">向阳乔木</a></span>
-          <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">Hacker News</a>
-          <a href="https://hnrss.org/" target="_blank" rel="noopener noreferrer">HNRSS</a>
-        </div>
-        <nav class="footer-actions" aria-label="支持与开源">
-          <button class="footer-icon-btn" type="button" data-action="open-support" data-support="follow" data-tooltip="关注公众号" aria-label="关注乔木公众号">
-            <span data-lucide="message-circle" aria-hidden="true"></span>
-          </button>
-          <button class="footer-icon-btn" type="button" data-action="open-support" data-support="reward" data-tooltip="打赏支持" aria-label="打赏支持">
-            <span data-lucide="heart" aria-hidden="true"></span>
-          </button>
-          <a class="footer-icon-btn" href="https://github.com/joeseesun/qiaomu-hn-reader" target="_blank" rel="noopener noreferrer" data-tooltip="GitHub 开源" aria-label="在 GitHub 查看乔木 HN 速读开源项目">
-            <span data-lucide="github" aria-hidden="true"></span>
-          </a>
-        </nav>
-      </footer>
-    </div>
-
-    <dialog class="support-dialog" data-support-dialog aria-labelledby="support-dialog-title">
-      <div class="support-dialog-panel">
-        <button class="support-dialog-close" type="button" data-action="close-support" aria-label="关闭">
-          <span data-lucide="x" aria-hidden="true"></span>
-        </button>
-        <div class="support-dialog-kicker" data-support-kicker></div>
-        <h2 id="support-dialog-title" data-support-title></h2>
-        <img class="support-dialog-qr" data-support-image width="280" height="280" alt="" />
-        <p data-support-description></p>
+    <footer class="foot">
+      <div class="wrap">
+        <p>乔木 HN 速读 · 每小时同步 <a href="https://news.ycombinator.com/" target="_blank" rel="noopener noreferrer">Hacker News</a> 热门内容，数据经 <a href="https://hnrss.org/" target="_blank" rel="noopener noreferrer">HNRSS</a>。中文标题、摘要和讨论速读由 AI 生成，可能有误。</p>
+        <p class="links">
+          <button type="button" data-action="open-support" data-support="follow">关注公众号</button>
+          <button type="button" data-action="open-support" data-support="reward">打赏支持</button>
+          <a href="https://tuijian.qiaomu.ai/" target="_blank" rel="noopener">乔木推荐</a>
+          <a href="https://hackerpapers.qiaomu.ai/" target="_blank" rel="noopener">HackerPapers</a>
+          <a href="https://hackerurls.qiaomu.ai/" target="_blank" rel="noopener">HackerURLs</a>
+          <a href="https://hackerbooks.qiaomu.ai/" target="_blank" rel="noopener">黑客书架</a>
+          <a href="https://hn-writing.qiaomu.ai/" target="_blank" rel="noopener">HN 写作课</a>
+          <a href="https://github.com/joeseesun/qiaomu-hn-reader" target="_blank" rel="noopener noreferrer">GitHub 开源</a>
+          <a href="https://www.qiaomu.ai/" target="_blank" rel="noopener">向阳乔木</a>
+        </p>
       </div>
+    </footer>
+
+    <dialog class="qr" data-support-dialog aria-labelledby="support-dialog-title">
+      <button class="x" type="button" data-action="close-support" aria-label="关闭">×</button>
+      <p class="kicker" data-support-kicker></p>
+      <h2 id="support-dialog-title" data-support-title></h2>
+      <img data-support-image width="240" height="240" alt="" />
+      <p data-support-description></p>
+      <p class="links"><a href="https://www.qiaomu.ai/" target="_blank" rel="noopener">向阳乔木</a><a href="https://x.com/vista8" target="_blank" rel="noopener">X（Twitter）</a><a href="https://tuijian.qiaomu.ai/" target="_blank" rel="noopener">乔木推荐</a></p>
     </dialog>
 
     <div class="toast" data-toast role="status" aria-live="polite"></div>
